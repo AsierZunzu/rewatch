@@ -129,7 +129,7 @@ export default async function trackingRoutes(app: FastifyInstance) {
     const episodes = await prisma.episode.findMany({
       where: {
         showTmdbId: params.data.id,
-        airDate: { lte: new Date() }, // never mark unaired episodes
+        airsAt: { lte: new Date() }, // never mark unaired episodes (NULL never matches)
         ...(season !== undefined
           ? { season }
           : {

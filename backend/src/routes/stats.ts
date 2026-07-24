@@ -2,6 +2,7 @@
 import type { FastifyInstance } from 'fastify'
 import { prisma } from '../lib/prisma.js'
 import { Prisma } from '../generated/prisma/client.js'
+import { airedSql } from '../lib/airing.js'
 
 // Fallback runtimes when TMDB doesn't provide one.
 const FALLBACK_EPISODE_MIN = 40
@@ -79,7 +80,7 @@ export default async function statsRoutes(app: FastifyInstance) {
       WHERE f.user_id = ${userId} AND s.status IN ('Ended', 'Canceled')
         AND NOT EXISTS (
           SELECT 1 FROM episodes e
-          WHERE e.show_tmdb_id = f.show_tmdb_id AND e.season > 0 AND e.air_date <= now()
+          WHERE e.show_tmdb_id = f.show_tmdb_id AND e.season > 0 AND ${airedSql('e')}
             AND NOT EXISTS (
               SELECT 1 FROM watch_events w
               WHERE w.user_id = ${userId} AND w.episode_id = e.id

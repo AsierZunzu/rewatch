@@ -47,8 +47,14 @@ export default function Login() {
           setError(t('auth.passwordMismatch'))
           return
         }
-        // The browser language becomes the account language, changeable later.
-        await api.post('/api/auth/register', { username, password, email, language: browserLang() })
+        // Browser language and timezone seed the account; both changeable later.
+        await api.post('/api/auth/register', {
+          username,
+          password,
+          email,
+          language: browserLang(),
+          timezone: Intl.DateTimeFormat().resolvedOptions().timeZone,
+        })
       } else {
         await api.post('/api/auth/login', { username, password })
       }

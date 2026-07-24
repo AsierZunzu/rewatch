@@ -16,6 +16,12 @@ const usernameSchema = z
 const passwordSchema = z.string().min(8).max(128)
 const emailSchema = z.email().max(254).transform((e) => e.toLowerCase())
 const languageSchema = z.enum(['fr', 'en'])
+// Validated against the runtime's own IANA database rather than a hand-kept
+// list: the value reaches Postgres' AT TIME ZONE, so it must be a real zone.
+const timezoneSchema = z
+  .string()
+  .max(64)
+  .refine((tz) => Intl.supportedValuesOf('timeZone').includes(tz), 'unknown timezone')
 
 // Strict limit on bruteforce/mail-spam sensitive routes (per IP).
 const strictRateLimit = {
@@ -28,6 +34,7 @@ type UserRow = {
   email: string | null
   emailVerifiedAt: Date | null
   language: string
+  timezone: string
   isAdmin: boolean
   createdAt: Date
 }
@@ -38,6 +45,7 @@ const publicUser = (u: UserRow) => ({
   email: u.email,
   emailVerified: u.emailVerifiedAt !== null,
   language: u.language,
+  timezone: u.timezone,
   isAdmin: u.isAdmin,
   // The frontend shows the gate when blocked, and the deadline before that.
   blocked: isBlocked(u),
@@ -57,12 +65,14 @@ export default async function authRoutes(app: FastifyInstance) {
         password: passwordSchema,
         email: emailSchema,
         language: languageSchema.default('en'),
+        // Sent by the browser at signup; falls back to UTC for API clients.
+        timezone: timezoneSchema.default('UTC'),
       })
       .safeParse(request.body)
     if (!parsed.success) {
       return reply.code(400).send({ error: 'invalid_input', details: z.flattenError(parsed.error).fieldErrors })
     }
-    const { username, password, email, language } = parsed.data
+    const { username, password, email, language, timezone } = parsed.data
 
     if (await prisma.user.findUnique({ where: { username } })) {
       return reply.code(409).send({ error: 'username_taken' })
@@ -74,7 +84,7 @@ export default async function authRoutes(app: FastifyInstance) {
     // The very first account on a fresh instance is the operator.
     const isFirstAccount = (await prisma.user.count()) === 0
     const user = await prisma.user.create({
-      data: { username, email, language, isAdmin: isFirstAccount, passwordHash: await argon2.hash(password) },
+      data: { username, email, language, timezone, isAdmin: isFirstAccount, passwordHash: await argon2.hash(password) },
     })
     const token = await createAuthToken(user.id, 'VERIFY_EMAIL')
     sendVerificationEmail(email, username, token, language).catch((err) =>
@@ -119,6 +129,18 @@ export default async function authRoutes(app: FastifyInstance) {
     const user = await prisma.user.update({
       where: { id: request.user!.id },
       data: { language: body.data.language },
+    })
+    return publicUser(user)
+  })
+
+  // Local day used for calendar grouping and release pushes. Whether an episode
+  // has aired is decided by its absolute instant, so this never affects it.
+  app.patch('/api/auth/timezone', { preHandler: app.requireAuth }, async (request, reply) => {
+    const body = z.object({ timezone: timezoneSchema }).safeParse(request.body)
+    if (!body.success) return reply.code(400).send({ error: 'invalid_input' })
+    const user = await prisma.user.update({
+      where: { id: request.user!.id },
+      data: { timezone: body.data.timezone },
     })
     return publicUser(user)
   })
