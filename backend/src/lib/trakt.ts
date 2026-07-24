@@ -174,3 +174,80 @@ export const getLastActivities = (userId: number) =>
   apiGet<{ episodes?: { watched_at?: string }; movies?: { watched_at?: string } }>(userId, '/sync/last_activities')
 export const getRatings = (userId: number) => apiGetAll<TraktRatingItem>(userId, '/sync/ratings')
 export const getWatchlist = (userId: number) => apiGetAll<TraktWatchlistItem>(userId, '/sync/watchlist')
+
+// ——— Public catalog: air times ———
+//
+// Show metadata is public on Trakt — these endpoints need the instance api key
+// and no user token, so air times work even for users who never connected an
+// account. TMDB has no air time at all (only `air_date`), which is why this
+// exists: Trakt computes `first_aired` in UTC from the episode's air date and
+// the show's country and slot.
+
+/** Unauthenticated GET. Returns null on 404 so a missing show is not an error. */
+async function apiGetPublic<T>(path: string): Promise<T | null> {
+  const res = await fetch(`${BASE}${path}`, { headers: headers() })
+  if (res.status === 404) return null
+  if (!res.ok) throw new Error(`trakt GET ${path}: ${res.status}`)
+  return (await res.json()) as T
+}
+
+type TraktAirs = { day?: string | null; time?: string | null; timezone?: string | null }
+type TraktSeasonWithEpisodes = {
+  number: number
+  episodes?: { season: number; number: number; first_aired?: string | null }[]
+}
+
+export type ShowAirTimes = {
+  /** The show's weekly slot, local to `timezone`. Null when Trakt has none. */
+  airs: { time: string; timezone: string } | null
+  /** "season:number" → exact UTC instant. Episodes Trakt cannot date are absent. */
+  firstAired: Map<string, Date>
+}
+
+/**
+ * Air times for one show, looked up by TMDB id.
+ *
+ * Returns null — never throws — when Trakt is not configured on this instance,
+ * does not know the show, or is unreachable. Callers fall back to resolving the
+ * air date against the show's origin country, so this is pure enrichment.
+ */
+export async function getShowAirTimes(tmdbId: number): Promise<ShowAirTimes | null> {
+  if (!traktConfigured()) return null
+
+  try {
+    // `extended=full` on search already carries `airs`, saving a summary call.
+    const results = await apiGetPublic<{ show?: { ids: TraktIds; airs?: TraktAirs } }[]>(
+      `/search/tmdb/${tmdbId}?type=show&extended=full`,
+    )
+    const match = results?.[0]?.show
+    const traktId = match?.ids.trakt
+    if (!traktId) return null
+
+    // Older Trakt responses omit `airs` from search hits — ask directly.
+    let airs = match.airs
+    if (!airs?.time || !airs.timezone) {
+      airs = (await apiGetPublic<{ airs?: TraktAirs }>(`/shows/${traktId}?extended=full`))?.airs
+    }
+
+    const seasons =
+      (await apiGetPublic<TraktSeasonWithEpisodes[]>(`/shows/${traktId}/seasons?extended=episodes,full`)) ?? []
+
+    const firstAired = new Map<string, Date>()
+    for (const season of seasons) {
+      for (const ep of season.episodes ?? []) {
+        if (!ep.first_aired) continue
+        const at = new Date(ep.first_aired)
+        if (!Number.isNaN(at.getTime())) firstAired.set(`${ep.season}:${ep.number}`, at)
+      }
+    }
+
+    return {
+      airs: airs?.time && airs.timezone ? { time: airs.time, timezone: airs.timezone } : null,
+      firstAired,
+    }
+  } catch (err) {
+    // Rate limits, outages, schema drift: none of these should break caching a show.
+    console.warn(`trakt air times unavailable for tmdb:${tmdbId}: ${(err as Error).message}`)
+    return null
+  }
+}

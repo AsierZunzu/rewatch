@@ -3,6 +3,7 @@ import type { FastifyInstance } from 'fastify'
 import { prisma } from '../lib/prisma.js'
 import { Prisma } from '../generated/prisma/client.js'
 import { FALLBACK_EPISODE_MIN, FALLBACK_MOVIE_MIN } from '../lib/runtimes.js'
+import { airedSql } from '../lib/airing.js'
 
 export default async function statsRoutes(app: FastifyInstance) {
   app.get('/api/stats', { preHandler: app.requireAuth }, async (request) => {
@@ -76,7 +77,7 @@ export default async function statsRoutes(app: FastifyInstance) {
       WHERE f.user_id = ${userId} AND s.status IN ('Ended', 'Canceled')
         AND NOT EXISTS (
           SELECT 1 FROM episodes e
-          WHERE e.show_tmdb_id = f.show_tmdb_id AND e.season > 0 AND e.air_date <= now()
+          WHERE e.show_tmdb_id = f.show_tmdb_id AND e.season > 0 AND ${airedSql('e')}
             AND NOT EXISTS (
               SELECT 1 FROM watch_events w
               WHERE w.user_id = ${userId} AND w.episode_id = e.id

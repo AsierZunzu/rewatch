@@ -152,6 +152,62 @@ function LanguageRow() {
   )
 }
 
+// Decides which local day an episode is filed under (calendar, release pushes).
+// Not what decides whether an episode has aired — that is an absolute instant,
+// identical for everyone, see lib/airing.ts.
+function TimezoneRow() {
+  const { t } = useTranslation()
+  const qc = useQueryClient()
+  const { data: me } = useMe()
+  const [busy, setBusy] = useState(false)
+
+  const zones = Intl.supportedValuesOf('timeZone')
+  const detected = Intl.DateTimeFormat().resolvedOptions().timeZone
+  const current = me?.timezone ?? 'UTC'
+
+  const change = async (timezone: string) => {
+    if (timezone === current) return
+    setBusy(true)
+    try {
+      await api.patch('/api/auth/timezone', { timezone })
+      await qc.invalidateQueries({ queryKey: ['me'] })
+      await qc.invalidateQueries({ queryKey: ['calendar'] })
+    } finally {
+      setBusy(false)
+    }
+  }
+
+  return (
+    <div className="flex w-full flex-col gap-1.5 border-t border-white/5 px-4 py-3.5">
+      <div className="flex items-center justify-between gap-3">
+        <span className="flex-none text-sm font-semibold">{t('profile.timezone')}</span>
+        <select
+          value={current}
+          disabled={busy}
+          onChange={(e) => change(e.target.value)}
+          className="bg-track text-muted min-w-0 flex-1 truncate rounded-[10px] px-2.5 py-1.5 text-right text-xs font-bold disabled:opacity-50"
+        >
+          {/* A stored zone the runtime does not list would otherwise vanish from the select. */}
+          {(zones.includes(current) ? zones : [current, ...zones]).map((zone) => (
+            <option key={zone} value={zone}>
+              {zone}
+            </option>
+          ))}
+        </select>
+      </div>
+      {detected !== current && (
+        <button
+          type="button"
+          onClick={() => change(detected)}
+          className="text-accent self-end text-[11.5px] font-bold"
+        >
+          {t('profile.timezoneUseDetected', { zone: detected })}
+        </button>
+      )}
+    </div>
+  )
+}
+
 function PasswordModal({ onClose }: { onClose: () => void }) {
   const { t } = useTranslation()
   const [current, setCurrent] = useState('')
@@ -531,6 +587,7 @@ export default function Profile() {
             </button>
           )}
           <LanguageRow />
+          <TimezoneRow />
           <ThemeRow />
           <button
             type="button"
