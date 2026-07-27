@@ -25,6 +25,7 @@
     "remainingInSeason_other": "Noch {{count}} Folgen · Staffel {{season}}",
     "behind": "{{count}} Folgen im Rückstand",
     "lastOfSeason": "Letzte Folge der Staffel",
+    "lastAired": "Zuletzt ausgestrahlte Folge",
     "emptyTitle1": "Nichts zu schauen…",
     "emptyTitle2": "im Moment",
     "emptyText": "Folge deinen ersten Serien, dann erscheinen deine nächsten Folgen hier, bereit zum Abhaken.",

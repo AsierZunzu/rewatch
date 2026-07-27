@@ -17,17 +17,24 @@ function UpNextCard({ item }: { item: WatchlistShow }) {
 
   // "N episodes behind" when the next episode is far in the past.
   const behind = item.totalRemaining > item.seasonRemaining * 2 && item.totalRemaining - item.seasonRemaining > 8
+  // Most actionable fact first: a backlog outranks where the season ends, and
+  // the finale is a claim about the season itself — never inferred from the
+  // count, which only knows what has aired so far.
+  //
   // The time left tracks whichever count this variant shows: pairing "3 left in
   // season 2" with the runtime of every unwatched season would contradict it.
   const rest = behind
     ? { text: t('upnext.behind', { count: item.totalRemaining }), minutes: item.totalRemainingMinutes, tone: 'late' as const }
-    : item.seasonRemaining === 1
+    : item.isSeasonFinale
       ? { text: t('upnext.lastOfSeason'), minutes: item.seasonRemainingMinutes, tone: 'last' as const }
-      : {
-          text: t('upnext.remainingInSeason', { count: item.seasonRemaining, season: item.nextEpisode.season }),
-          minutes: item.seasonRemainingMinutes,
-          tone: 'normal' as const,
-        }
+      : item.seasonRemaining === 1
+        ? // Caught up mid-season: one to watch, but more still to be broadcast.
+          { text: t('upnext.lastAired'), minutes: item.seasonRemainingMinutes, tone: 'normal' as const }
+        : {
+            text: t('upnext.remainingInSeason', { count: item.seasonRemaining, season: item.nextEpisode.season }),
+            minutes: item.seasonRemainingMinutes,
+            tone: 'normal' as const,
+          }
   const restLeft = runtimeLabel(rest.minutes)
   const progressPct =
     item.totalRemaining > 0 ? Math.max(4, 100 - (item.seasonRemaining / (item.seasonRemaining + 3)) * 100) : 100
