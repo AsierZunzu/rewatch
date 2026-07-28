@@ -24,7 +24,7 @@
     "remainingInSeason_other": "{{count}} épisodes restants · Saison {{season}}",
     "behind": "{{count}} épisodes de retard",
     "lastOfSeason": "Dernier épisode de la saison",
-    "lastAired": "Dernier épisode diffusé · Saison {{season}}",
+    "lastAired": "Dernier épisode diffusé",
     "emptyTitle1": "Rien à regarder…",
     "emptyTitle2": "pour l'instant",
     "emptyText": "Suivez vos premières séries et vos prochains épisodes apparaîtront ici, prêts à être cochés.",
