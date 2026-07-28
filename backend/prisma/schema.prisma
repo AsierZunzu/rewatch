@@ -15,6 +15,10 @@ model User {
   email           String?   @unique // nullable in DB (pre-migration accounts), required at signup
   emailVerifiedAt DateTime? @map("email_verified_at")
   language        String    @default("en") // UI/email/push language: "fr" | "en"
+  // IANA zone used to bucket episodes into local days (calendar headers,
+  // "today's releases" push). Not used to decide whether an episode aired —
+  // that is an absolute-time question, see Episode.airsAt.
+  timezone        String    @default("UTC")
   // Set manually in SQL only — no promotion UI, on purpose.
   isAdmin         Boolean   @default(false) @map("is_admin")
   // "Verify your email" reminder sent one day before lockout (keeps the daily job from sending duplicates).
@@ -127,6 +131,14 @@ model Show {
   firstAirYear Int?      @map("first_air_year")
   cachedAt     DateTime  @default(now()) @map("cached_at")
 
+  // Broadcast slot, expressed in the show's own country. `airsTime`/`airsTimezone`
+  // come from Trakt (`airs`); `originCountry` from TMDB and is the fallback when
+  // Trakt has nothing. Together they resolve each episode's `airsAt`.
+  originCountry String?   @map("origin_country") // ISO 3166-1 alpha-2
+  airsTime      String?   @map("airs_time") // "21:00", local to airsTimezone
+  airsTimezone  String?   @map("airs_timezone") // IANA, e.g. "America/New_York"
+  airsCachedAt  DateTime? @map("airs_cached_at") // throttles Trakt refetches
+
   episodes     Episode[]
   follows      Follow[]
   translations ShowTranslation[]
@@ -141,7 +153,14 @@ model Episode {
   season     Int
   number     Int
   name       String?
+  // The calendar date the episode aired *in its own country* — what the show
+  // page and calendar headers display. Never use it to decide whether an
+  // episode has aired: a date has no instant. That is `airsAt`'s job.
   airDate    DateTime? @map("air_date") @db.Date
+  // Absolute instant the episode aired. The single source of truth for every
+  // "has it aired yet?" check. NULL means unknown → treated as not aired.
+  airsAt       DateTime?     @map("airs_at") @db.Timestamptz(3)
+  airsAtSource AirsAtSource? @map("airs_at_source")
   runtime    Int? // minutes
 
   show         Show                 @relation(fields: [showTmdbId], references: [tmdbId], onDelete: Cascade)
@@ -149,7 +168,16 @@ model Episode {
   translations EpisodeTranslation[]
 
   @@unique([showTmdbId, season, number])
+  @@index([showTmdbId, airsAt])
   @@map("episodes")
+}
+
+// How an episode's `airsAt` was obtained — kept so that "why did this appear
+// early?" is answerable without re-deriving the value by hand.
+enum AirsAtSource {
+  TRAKT // per-episode first_aired from Trakt, already UTC
+  SCHEDULE // air_date + the show's broadcast slot, in the show's timezone
+  FALLBACK // air_date end-of-day in the origin country (no slot known)
 }
 
 model Movie {

@@ -4,6 +4,7 @@ import { z } from 'zod'
 import { prisma } from '../lib/prisma.js'
 import { Prisma } from '../generated/prisma/client.js'
 import { localizeEpisodes, localizeMovies, localizeShows } from '../lib/catalog.js'
+import { airedSql, userToday } from '../lib/airing.js'
 
 const idParam = z.object({ id: z.coerce.number().int().positive() })
 
@@ -16,6 +17,7 @@ type NextEpisodeRow = {
   air_date: Date | null
   season_remaining: bigint
   total_remaining: bigint
+  more_in_season: boolean
   last_watched_at: Date | null
 }
 
@@ -32,7 +34,7 @@ export default async function libraryRoutes(app: FastifyInstance) {
         FROM episodes e
         JOIN follows f ON f.show_tmdb_id = e.show_tmdb_id
         WHERE f.user_id = ${userId} AND f.state = 'WATCHING'
-          AND e.season > 0 AND e.air_date <= now()
+          AND e.season > 0 AND ${airedSql('e')}
       ),
       unseen AS (
         SELECT a.* FROM aired a
@@ -54,6 +56,19 @@ export default async function libraryRoutes(app: FastifyInstance) {
         JOIN next_ep n USING (show_tmdb_id)
         GROUP BY u.show_tmdb_id
       ),
+      -- Does the season continue past the next episode? Deliberately read from
+      -- episodes, not from the aired CTE: an episode that merely exists — even
+      -- with no air date yet — proves the next one is not the season finale.
+      -- Counting only aired episodes calls every caught-up week a finale.
+      ahead AS (
+        SELECT n.show_tmdb_id,
+          EXISTS (
+            SELECT 1 FROM episodes e
+            WHERE e.show_tmdb_id = n.show_tmdb_id
+              AND e.season = n.season AND e.number > n.number
+          ) AS more_in_season
+        FROM next_ep n
+      ),
       activity AS (
         SELECT e.show_tmdb_id, max(w.watched_at) AS last_watched_at
         FROM watch_events w
@@ -64,9 +79,10 @@ export default async function libraryRoutes(app: FastifyInstance) {
       SELECT
         n.show_tmdb_id, n.id AS episode_id, n.season, n.number,
         n.name AS episode_name, n.air_date,
-        c.season_remaining, c.total_remaining, a.last_watched_at
+        c.season_remaining, c.total_remaining, h.more_in_season, a.last_watched_at
       FROM next_ep n
       JOIN counts c USING (show_tmdb_id)
+      JOIN ahead h USING (show_tmdb_id)
       LEFT JOIN activity a USING (show_tmdb_id)
       ORDER BY a.last_watched_at DESC NULLS LAST
     `)
@@ -104,8 +120,12 @@ export default async function libraryRoutes(app: FastifyInstance) {
           name: nextEpNames.get(r.episode_id) ?? r.episode_name,
           airDate: r.air_date,
         },
+        // Counts stay aired-only — they answer "how much can I watch now?".
+        // Whether this is the finale is a fact about the season, not about
+        // what has been broadcast so far, so it gets its own flag.
         seasonRemaining: Number(r.season_remaining),
         totalRemaining: Number(r.total_remaining),
+        isSeasonFinale: !r.more_in_season,
         lastWatchedAt: r.last_watched_at,
       })),
       movies,
@@ -122,11 +142,11 @@ export default async function libraryRoutes(app: FastifyInstance) {
       WITH counts AS (
         SELECT f.show_tmdb_id,
           (SELECT count(*) FROM episodes e
-            WHERE e.show_tmdb_id = f.show_tmdb_id AND e.season > 0 AND e.air_date <= now()) AS aired,
+            WHERE e.show_tmdb_id = f.show_tmdb_id AND e.season > 0 AND ${airedSql('e')}) AS aired,
           (SELECT count(DISTINCT w.episode_id) FROM watch_events w
             JOIN episodes e ON e.id = w.episode_id
             WHERE w.user_id = ${userId} AND e.show_tmdb_id = f.show_tmdb_id
-              AND e.season > 0 AND e.air_date <= now()) AS seen,
+              AND e.season > 0 AND ${airedSql('e')}) AS seen,
           (SELECT max(w.watched_at) FROM watch_events w
             JOIN episodes e ON e.id = w.episode_id
             WHERE w.user_id = ${userId} AND e.show_tmdb_id = f.show_tmdb_id) AS last_watched_at
@@ -192,7 +212,7 @@ export default async function libraryRoutes(app: FastifyInstance) {
           JOIN episodes e ON e.id = w.episode_id
           WHERE w.user_id = ${userId} AND e.show_tmdb_id = f.show_tmdb_id AND e.season > 0) AS watched,
         (SELECT count(*) FROM episodes e
-          WHERE e.show_tmdb_id = f.show_tmdb_id AND e.season > 0 AND e.air_date <= now()) AS aired,
+          WHERE e.show_tmdb_id = f.show_tmdb_id AND e.season > 0 AND ${airedSql('e')}) AS aired,
         (SELECT max(w.watched_at) FROM watch_events w
           JOIN episodes e ON e.id = w.episode_id
           WHERE w.user_id = ${userId} AND e.show_tmdb_id = f.show_tmdb_id) AS last_watched_at
@@ -220,10 +240,15 @@ export default async function libraryRoutes(app: FastifyInstance) {
   app.get('/api/calendar', { preHandler: app.requireAuth }, async (request) => {
     const query = z.object({ days: z.coerce.number().int().min(1).max(90).default(30) }).parse(request.query ?? {})
     const until = new Date(Date.now() + query.days * 24 * 60 * 60 * 1000)
+    // A schedule, not an aired gate: it lists broadcast dates, so it filters and
+    // groups on air_date and only needs "today" resolved in the viewer's own
+    // zone. (The previous boundary used the Node process timezone, which put the
+    // calendar a day out for anyone whose server was not on UTC.)
+    const from = await userToday(prisma, request.user!.timezone)
 
     const episodes = await prisma.episode.findMany({
       where: {
-        airDate: { gte: new Date(new Date().toDateString()), lte: until },
+        airDate: { gte: from, lte: until },
         season: { gt: 0 },
         show: { follows: { some: { userId: request.user!.id, state: { not: 'ARCHIVED' } } } },
       },
