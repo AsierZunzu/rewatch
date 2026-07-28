@@ -26,7 +26,7 @@ function UpNextCard({ item }: { item: WatchlistShow }) {
       ? { text: t('upnext.lastOfSeason'), tone: 'last' as const }
       : item.seasonRemaining === 1
         ? // Caught up mid-season: one to watch, but more still to be broadcast.
-          { text: t('upnext.lastAired', { season: item.nextEpisode.season }), tone: 'normal' as const }
+          { text: t('upnext.lastAired'), tone: 'normal' as const }
         : {
             text: t('upnext.remainingInSeason', { count: item.seasonRemaining, season: item.nextEpisode.season }),
             tone: 'normal' as const,
