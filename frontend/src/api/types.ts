@@ -3,7 +3,9 @@ export type User = {
   username: string
   email: string | null
   emailVerified: boolean
-  language: 'fr' | 'en'
+  // Plain string, not Lang: a row could hold a language this build no longer
+  // ships. Narrow it with toLang() before using it.
+  language: string
   isAdmin: boolean
   blocked: boolean
   verifyDeadline: string | null

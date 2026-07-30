@@ -1,7 +1,7 @@
 import { useEffect } from 'react'
 import { Navigate, Route, Routes, useLocation } from 'react-router-dom'
 import { useMe } from './api/hooks'
-import i18n from './i18n'
+import i18n, { toLang } from './i18n'
 import Layout from './components/Layout'
 import { Spinner } from './components/ui'
 import Admin from './screens/Admin'
@@ -27,7 +27,7 @@ import UpNext from './screens/UpNext'
 function LanguageSync() {
   const { data: me } = useMe()
   useEffect(() => {
-    const lang = me?.language === 'fr' ? 'fr' : me ? 'en' : null
+    const lang = me ? toLang(me.language) : null
     if (lang && i18n.language !== lang) void i18n.changeLanguage(lang)
     document.documentElement.lang = i18n.language
   }, [me])

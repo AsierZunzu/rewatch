@@ -1,6 +1,6 @@
-import i18n from '../i18n'
+import i18n, { INTL_LOCALE, toLang } from '../i18n'
 
-const locale = () => (i18n.language === 'fr' ? 'fr-FR' : 'en-GB')
+const locale = () => INTL_LOCALE[toLang(i18n.language)]
 
 export const epCode = (season: number, number: number) =>
   `S${String(season).padStart(2, '0')}E${String(number).padStart(2, '0')}`

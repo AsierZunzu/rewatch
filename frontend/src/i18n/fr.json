@@ -296,7 +296,8 @@
     "daysHours": "{{days}} j {{hours}} h",
     "hoursMin": "{{hours}} h {{min}} min",
     "hoursShort": "{{h}} h {{mm}}",
-    "minutes": "{{min}} min"
+    "minutes": "{{min}} min",
+    "dayShort": "j"
   },
   "pushPrompt": {
     "title": "Ne ratez plus une sortie",

@@ -2,8 +2,9 @@
 // disabled when SMTP_HOST is empty (links are logged instead; handy in dev).
 import nodemailer from 'nodemailer'
 import { getSetting } from './settings.js'
+import { DEFAULT_LANG, type Lang } from './langs.js'
 
-export type Lang = 'fr' | 'en'
+export type { Lang }
 
 const from = () => getSetting('MAIL_FROM') ?? 'Rewatch <no-reply@rewatch.local>'
 
@@ -53,6 +54,16 @@ ${link}
 
 The link is valid for 7 days. If you didn't sign up, just ignore this message.`,
     }),
+    de: (username: string, link: string) => ({
+      subject: 'Rewatch — bestätige deine E-Mail-Adresse',
+      text: `Hallo ${username},
+
+willkommen bei Rewatch! Klicke auf diesen Link, um deine E-Mail-Adresse zu bestätigen:
+
+${link}
+
+Der Link ist 7 Tage gültig. Falls du dich nicht registriert hast, ignoriere diese Nachricht einfach.`,
+    }),
   },
   verifyReminder: {
     fr: (username: string, link: string) => ({
@@ -72,6 +83,16 @@ ${link}`,
 Quick reminder: your email address is still unverified, and your Rewatch account will be locked tomorrow unless you verify it (it unlocks as soon as you do — nothing is lost).
 
 Click here to verify:
+
+${link}`,
+    }),
+    de: (username: string, link: string) => ({
+      subject: 'Rewatch — letzte Chance, deine E-Mail zu bestätigen',
+      text: `Hallo ${username},
+
+kurze Erinnerung: deine E-Mail-Adresse ist noch nicht bestätigt, und dein Rewatch-Konto wird morgen gesperrt, wenn du das nicht nachholst. Die Sperre wird sofort aufgehoben, sobald du bestätigst, es geht nichts verloren.
+
+Hier klicken zum Bestätigen:
 
 ${link}`,
     }),
@@ -97,20 +118,30 @@ ${link}
 
 The link is valid for 1 hour and can only be used once. If you didn't ask for this, ignore this message — your password stays unchanged.`,
     }),
+    de: (username: string, link: string) => ({
+      subject: 'Rewatch — Passwort zurücksetzen',
+      text: `Hallo ${username},
+
+jemand (hoffentlich du) hat angefragt, dein Rewatch-Passwort zurückzusetzen. Hier klicken:
+
+${link}
+
+Der Link ist 1 Stunde gültig und kann nur einmal verwendet werden. Falls du das nicht angefragt hast, ignoriere diese Nachricht, dein Passwort bleibt unverändert.`,
+    }),
   },
 }
 
-export const sendVerificationEmail = (to: string, username: string, token: string, lang: Lang = 'en') => {
+export const sendVerificationEmail = (to: string, username: string, token: string, lang: Lang = DEFAULT_LANG) => {
   const { subject, text } = T.verify[lang](username, `${appUrl()}/verify?token=${token}`)
   return send(to, subject, text)
 }
 
-export const sendVerifyReminderEmail = (to: string, username: string, token: string, lang: Lang = 'en') => {
+export const sendVerifyReminderEmail = (to: string, username: string, token: string, lang: Lang = DEFAULT_LANG) => {
   const { subject, text } = T.verifyReminder[lang](username, `${appUrl()}/verify?token=${token}`)
   return send(to, subject, text)
 }
 
-export const sendResetEmail = (to: string, username: string, token: string, lang: Lang = 'en') => {
+export const sendResetEmail = (to: string, username: string, token: string, lang: Lang = DEFAULT_LANG) => {
   const { subject, text } = T.reset[lang](username, `${appUrl()}/reset?token=${token}`)
   return send(to, subject, text)
 }

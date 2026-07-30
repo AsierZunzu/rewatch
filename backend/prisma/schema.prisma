@@ -14,7 +14,7 @@ model User {
   username        String    @unique
   email           String?   @unique // nullable in DB (pre-migration accounts), required at signup
   emailVerifiedAt DateTime? @map("email_verified_at")
-  language        String    @default("en") // UI/email/push language: "fr" | "en"
+  language        String    @default("en") // UI/email/push language, see lib/langs.ts
   // Set manually in SQL only — no promotion UI, on purpose.
   isAdmin         Boolean   @default(false) @map("is_admin")
   // "Verify your email" reminder sent one day before lockout (keeps the daily job from sending duplicates).
@@ -178,7 +178,7 @@ model Movie {
 // instance-language copy as fallback; these override per profile language.
 model ShowTranslation {
   showTmdbId Int      @map("show_tmdb_id")
-  lang       String // "fr" | "en"
+  lang       String // one of LANGS, see lib/langs.ts
   name       String
   overview   String?
   genres     String[]
