@@ -41,6 +41,8 @@
     "title": "Kalender",
     "today": "Heute",
     "tomorrow": "Morgen",
+    "daysUntil_one": "({{count}} Tag)",
+    "daysUntil_other": "({{count}} Tage)",
     "onlyDaysWithReleases": "Es werden nur Tage mit einer Veröffentlichung angezeigt",
     "noUpcoming": "Keine anstehenden Veröffentlichungen für deine Serien"
   },
