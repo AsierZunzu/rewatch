@@ -81,7 +81,7 @@ export default async function authRoutes(app: FastifyInstance) {
       app.log.error(err, 'verification email failed'),
     )
 
-    await createSession(reply, user.id)
+    await createSession(request, reply, user.id)
     return reply.code(201).send(publicUser(user))
   })
 
@@ -98,7 +98,7 @@ export default async function authRoutes(app: FastifyInstance) {
       return reply.code(401).send({ error: 'invalid_credentials' })
     }
 
-    await createSession(reply, user.id)
+    await createSession(request, reply, user.id)
     return publicUser(user)
   })
 
