@@ -8,8 +8,13 @@
 # public URL, email, push keys). Put an HTTPS reverse proxy in front for
 # PWA installation and push notifications.
 #
-# Daily job (release push notifications, verification reminders) — schedule
-# once a day with cron on the host:
+# The daily job (release push notifications, verification reminders) is
+# scheduled inside the container by DAILY_JOB_AT below, so there is no cron
+# entry to add on the host. Set TZ as well, or the time is read as UTC.
+#
+# Already running it from the host? Leave DAILY_JOB_AT out instead, or both
+# fire and every release push goes out twice. The one-shot command is
+# unchanged:
 #   docker compose exec app node dist/jobs/daily.js
 
 services:
@@ -38,6 +43,8 @@ services:
         condition: service_healthy
     environment:
       DATABASE_URL: postgresql://rewatch:${POSTGRES_PASSWORD:-rewatch}@db:5432/rewatch
+      DAILY_JOB_AT: '08:30'
+      TZ: ${TZ:-Etc/UTC}
     ports:
       - '3020:3020'
 

@@ -57,7 +57,9 @@ docker compose up -d
 
 Open `http://localhost:3020`. **The first account you create becomes the administrator** and a setup wizard walks you through the rest: TMDB key (validated live), public URL, optional email, push keys generated in one click. No configuration file to edit.
 
-Put an HTTPS reverse proxy in front (PWA installation and push notifications require HTTPS), and schedule the daily job once a day with cron:
+Put an HTTPS reverse proxy in front (PWA installation and push notifications require HTTPS). The daily job that sends release pushes and verification reminders is already scheduled inside the container by `DAILY_JOB_AT` in the compose file, so there is nothing to add to the host's crontab. Set `TZ` alongside it, or `08:30` is read as UTC.
+
+If you would rather drive it yourself, remove `DAILY_JOB_AT` and run the one-shot command from cron or a systemd timer. Keeping both means every release push goes out twice.
 
 ```bash
 docker compose exec app node dist/jobs/daily.js
@@ -105,7 +107,7 @@ npm ci
 npm run build               # outputs to frontend/dist
 ```
 
-Serve `frontend/dist` as static files and proxy `/api/` to the backend port (nginx, Caddy, or set `STATIC_DIR=../frontend/dist` to let the API serve the frontend itself). Schedule `node dist/jobs/daily.js` once a day (cron or a systemd timer): it sends the release push notifications and the verification reminder emails.
+Serve `frontend/dist` as static files and proxy `/api/` to the backend port (nginx, Caddy, or set `STATIC_DIR=../frontend/dist` to let the API serve the frontend itself). For the daily job, which sends the release push notifications and the verification reminder emails, pick one of the two: set `DAILY_JOB_AT=08:30` to schedule it inside the server process, or run `node dist/jobs/daily.js` once a day from cron or a systemd timer. Both at once sends every release push twice.
 
 ### Configuration
 
