@@ -203,8 +203,12 @@ export async function localizeShows<T extends { tmdbId: number; name: string; ov
     if (!t) return s
     return {
       ...s,
-      name: t.name,
-      ...('overview' in s ? { overview: t.overview ?? s.overview } : {}),
+      // TMDB answers with an empty string, not null, for a field it has no
+      // translation of. So "" means untranslated and has to fall back to the
+      // base row exactly like a missing value would: `??` alone let it through
+      // and blanked the synopsis. Same reasoning as the genres line below.
+      name: t.name || s.name,
+      ...('overview' in s ? { overview: t.overview || s.overview } : {}),
       ...('genres' in s ? { genres: t.genres.length ? t.genres : s.genres } : {}),
     }
   })
@@ -239,8 +243,9 @@ export async function localizeMovies<T extends { tmdbId: number; title: string; 
     if (!t) return m
     return {
       ...m,
-      title: t.title,
-      ...('overview' in m ? { overview: t.overview ?? m.overview } : {}),
+      // Empty string from TMDB means untranslated — see localizeShows above.
+      title: t.title || m.title,
+      ...('overview' in m ? { overview: t.overview || m.overview } : {}),
       ...('genres' in m ? { genres: t.genres.length ? t.genres : m.genres } : {}),
     }
   })
