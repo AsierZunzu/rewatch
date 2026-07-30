@@ -2,7 +2,7 @@ import type { FastifyInstance } from 'fastify'
 import { z } from 'zod'
 import * as tmdb from '../lib/tmdb.js'
 import { getMovieCached, getShowCached, localizeEpisodes, localizeMovies, localizeShows } from '../lib/catalog.js'
-import { LANG_TO_TMDB } from '../lib/tmdb.js'
+import { LANG_TO_TMDB, toLang } from '../lib/langs.js'
 
 const idParam = z.object({ id: z.coerce.number().int().positive() })
 
@@ -12,7 +12,7 @@ export default async function catalogRoutes(app: FastifyInstance) {
     const query = z.object({ q: z.string().min(1).max(200) }).safeParse(request.query)
     if (!query.success) return reply.code(400).send({ error: 'invalid_query' })
 
-    const { results } = await tmdb.searchMulti(query.data.q, LANG_TO_TMDB[request.user!.language])
+    const { results } = await tmdb.searchMulti(query.data.q, LANG_TO_TMDB[toLang(request.user!.language)])
     return results
       .filter((r) => r.media_type === 'tv' || r.media_type === 'movie')
       .map((r) => ({

@@ -4,6 +4,7 @@ import { useHighlights, useStats } from '../api/hooks'
 import { Poster } from '../components/Poster'
 import { ScreenTitle, Spinner, StarRow } from '../components/ui'
 import { minutesToDaysHours } from '../lib/format'
+import { INTL_LOCALE, toLang } from '../i18n'
 
 const GENRE_COLORS = ['#FFC94B', '#3FA98E', '#5B82D6', '#CD6A55', '#55628A']
 
@@ -13,7 +14,7 @@ export default function Stats() {
   const { data: highlights } = useHighlights()
   if (isLoading || !data) return <Spinner />
 
-  const numberLocale = i18n.language === 'fr' ? 'fr-FR' : 'en-GB'
+  const numberLocale = INTL_LOCALE[toLang(i18n.language)]
   const days = Math.floor(data.totalMinutes / 60 / 24)
   const hours = Math.round(data.totalMinutes / 60)
 

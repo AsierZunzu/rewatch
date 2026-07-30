@@ -13,7 +13,8 @@ import { fileURLToPath } from 'node:url'
 import { prisma } from '../lib/prisma.js'
 import { loadSettings } from '../lib/settings.js'
 import { createAuthToken } from '../lib/auth-tokens.js'
-import { sendVerifyReminderEmail, type Lang } from '../lib/mailer.js'
+import { sendVerifyReminderEmail } from '../lib/mailer.js'
+import { toLang, type Lang } from '../lib/langs.js'
 import { REMINDER_BEFORE_MS, VERIFY_GRACE_MS } from '../lib/verification.js'
 
 /** Console when run as a command, the Fastify logger when run in-process. */
@@ -60,6 +61,11 @@ const PUSH_T = {
     many: (n: number) => `${n} episodes air today`,
     more: (n: number) => `… and ${n} more`,
   },
+  de: {
+    one: 'Neue Folge verfügbar',
+    many: (n: number) => `${n} Folgen laufen heute`,
+    more: (n: number) => `… und ${n} weitere`,
+  },
 }
 
 // "New episode" push: today's releases for followed (WATCHING) shows,
@@ -94,7 +100,7 @@ async function sendNewEpisodePushes() {
 
   const langs = new Map(
     (await prisma.user.findMany({ where: { id: { in: [...byUser.keys()] } }, select: { id: true, language: true } })).map(
-      (u) => [u.id, (u.language === 'fr' ? 'fr' : 'en') as Lang],
+      (u) => [u.id, toLang(u.language)],
     ),
   )
 
