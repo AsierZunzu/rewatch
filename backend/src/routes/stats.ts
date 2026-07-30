@@ -2,10 +2,7 @@
 import type { FastifyInstance } from 'fastify'
 import { prisma } from '../lib/prisma.js'
 import { Prisma } from '../generated/prisma/client.js'
-
-// Fallback runtimes when TMDB doesn't provide one.
-const FALLBACK_EPISODE_MIN = 40
-const FALLBACK_MOVIE_MIN = 110
+import { FALLBACK_EPISODE_MIN, FALLBACK_MOVIE_MIN } from '../lib/runtimes.js'
 
 export default async function statsRoutes(app: FastifyInstance) {
   app.get('/api/stats', { preHandler: app.requireAuth }, async (request) => {

@@ -17,14 +17,18 @@ function UpNextCard({ item }: { item: WatchlistShow }) {
 
   // "N episodes behind" when the next episode is far in the past.
   const behind = item.totalRemaining > item.seasonRemaining * 2 && item.totalRemaining - item.seasonRemaining > 8
+  // The time left tracks whichever count this variant shows: pairing "3 left in
+  // season 2" with the runtime of every unwatched season would contradict it.
   const rest = behind
-    ? { text: t('upnext.behind', { count: item.totalRemaining }), tone: 'late' as const }
+    ? { text: t('upnext.behind', { count: item.totalRemaining }), minutes: item.totalRemainingMinutes, tone: 'late' as const }
     : item.seasonRemaining === 1
-      ? { text: t('upnext.lastOfSeason'), tone: 'last' as const }
+      ? { text: t('upnext.lastOfSeason'), minutes: item.seasonRemainingMinutes, tone: 'last' as const }
       : {
           text: t('upnext.remainingInSeason', { count: item.seasonRemaining, season: item.nextEpisode.season }),
+          minutes: item.seasonRemainingMinutes,
           tone: 'normal' as const,
         }
+  const restLeft = runtimeLabel(rest.minutes)
   const progressPct =
     item.totalRemaining > 0 ? Math.max(4, 100 - (item.seasonRemaining / (item.seasonRemaining + 3)) * 100) : 100
 
@@ -65,7 +69,9 @@ function UpNextCard({ item }: { item: WatchlistShow }) {
         >
           {justChecked
             ? t('upnext.justChecked', { code: epCode(item.nextEpisode.season, item.nextEpisode.number + 1) })
-            : rest.text}
+            : restLeft
+              ? `${rest.text} · ${restLeft}`
+              : rest.text}
         </div>
       </div>
       <CheckButton checked={justChecked} busy={justChecked} onClick={check} />
