@@ -481,6 +481,13 @@ export default function Profile() {
             </div>
             <span className="text-dim">›</span>
           </Link>
+          <Link viewTransition to="/calendar-feed" className="flex w-full items-center justify-between gap-3 border-t border-white/5 px-4 py-3.5">
+            <div className="text-left">
+              <span className="text-sm font-semibold">{t('profile.calendarFeedRow')}</span>
+              <div className="text-dim mt-0.5 text-[11px] font-semibold">{t('profile.calendarFeedRowHint')}</div>
+            </div>
+            <span className="text-dim">›</span>
+          </Link>
           <a href="/api/account/export" download className="flex w-full items-center justify-between gap-3 border-t border-white/5 px-4 py-3.5">
             <div className="text-left">
               <span className="text-sm font-semibold">{t('profile.exportTitle')}</span>

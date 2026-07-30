@@ -11,6 +11,7 @@ import adminRoutes from './routes/admin.js'
 import authRoutes from './routes/auth.js'
 import catalogRoutes from './routes/catalog.js'
 import importRoutes from './routes/import.js'
+import calendarFeedRoutes from './routes/calendar-feed.js'
 import libraryRoutes from './routes/library.js'
 import pushRoutes from './routes/push.js'
 import settingsRoutes from './routes/settings.js'
@@ -46,6 +47,7 @@ export async function buildApp() {
   await app.register(importRoutes)
   await app.register(trackingRoutes)
   await app.register(libraryRoutes)
+  await app.register(calendarFeedRoutes)
   await app.register(statsRoutes)
   await app.register(pushRoutes)
   await app.register(settingsRoutes)
