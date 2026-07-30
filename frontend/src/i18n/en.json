@@ -41,7 +41,7 @@
     "title": "Calendar",
     "today": "Today",
     "tomorrow": "Tomorrow",
-    "daysUntil": "({{count}} day)",
+    "daysUntil_one": "({{count}} day)",
     "daysUntil_other": "({{count}} days)",
     "onlyDaysWithReleases": "Only days with a release are shown",
     "noUpcoming": "No upcoming releases for your shows"
