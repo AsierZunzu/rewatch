@@ -1,11 +1,12 @@
-// TV Time import card: dropzone + job progress + final report.
+// File import card: dropzone + job progress + final report.
+// Takes a TV Time GDPR zip or a Rewatch export JSON — routed by extension.
 // Lives on the import screen; re-adopts the user's latest job on mount so
 // navigating away during an import doesn't lose the progress display.
 import { useRef, useState } from 'react'
 import { Link } from 'react-router-dom'
 import { useQuery, useQueryClient } from '@tanstack/react-query'
 import { Trans, useTranslation } from 'react-i18next'
-import { api } from '../api/client'
+import { ApiError, api } from '../api/client'
 import { useImportJob, usePending } from '../api/hooks'
 import type { ImportJob } from '../api/types'
 
@@ -18,6 +19,7 @@ export default function ImportCard() {
   const [jobId, setJobId] = useState<number | null>(null)
   const [fileName, setFileName] = useState('')
   const [dragOver, setDragOver] = useState(false)
+  const [uploadError, setUploadError] = useState<string | null>(null)
   const { data: latest } = useQuery({
     queryKey: ['import-job-latest'],
     queryFn: () => api.get<{ job: ImportJob | null }>('/api/import/jobs/latest'),
@@ -36,10 +38,21 @@ export default function ImportCard() {
 
   const upload = async (file: File) => {
     setFileName(file.name)
+    setUploadError(null)
     const form = new FormData()
     form.append('file', file)
-    const { jobId } = await api.post<{ jobId: number }>('/api/import/tvtime', form)
-    setJobId(jobId)
+    // A .json is our own export; anything else is assumed to be the TV Time zip
+    // (whose endpoint validates it anyway).
+    const endpoint = file.name.toLowerCase().endsWith('.json') ? '/api/import/rewatch' : '/api/import/tvtime'
+    try {
+      const { jobId } = await api.post<{ jobId: number }>(endpoint, form)
+      setJobId(jobId)
+    } catch (err) {
+      // The Rewatch endpoint validates before queueing, so bad files fail here
+      // rather than surfacing as a failed job.
+      const code = err instanceof ApiError ? err.code : 'upload_failed'
+      setUploadError(t(`profile.importError.${code}`, { defaultValue: t('profile.importError.upload_failed') }))
+    }
   }
 
   // Finished report
@@ -118,7 +131,8 @@ export default function ImportCard() {
 
   return (
     <div className="bg-card rounded-[18px] border border-line p-4">
-      {job?.status === 'FAILED' && (
+      {uploadError && <div className="text-danger mb-3 text-[13px] font-semibold">{uploadError}</div>}
+      {!uploadError && job?.status === 'FAILED' && (
         <div className="text-danger mb-3 text-[13px] font-semibold">{t('profile.importFailed', { error: job.error })}</div>
       )}
       <div className="flex items-center gap-2">
@@ -153,7 +167,7 @@ export default function ImportCard() {
       <input
         ref={fileRef}
         type="file"
-        accept=".zip"
+        accept=".zip,.json,application/json"
         className="hidden"
         onChange={(e) => {
           const file = e.target.files?.[0]

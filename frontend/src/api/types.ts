@@ -103,11 +103,11 @@ export type Stats = {
 }
 
 export type ImportReport = {
-  shows: { mapped: number; unmapped: { tvdbId: number; name: string }[] }
+  shows: { mapped: number; unmapped: { tvdbId: number | null; tmdbId?: number; name: string }[] }
   episodes: { imported: number; unmatched: number }
   follows: number
   ratings: number
-  movies: { autoMatched: number; pending: number; watchlist: number }
+  movies: { autoMatched: number; pending: number; watchlist: number; failed?: number }
 }
 export type ImportJob = {
   id: number
