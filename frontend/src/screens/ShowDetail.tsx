@@ -8,6 +8,7 @@ import { Poster } from '../components/Poster'
 import StateMenu from '../components/StateMenu'
 import { Spinner, Stars } from '../components/ui'
 import { frDate, initial, posterColor, tmdbImage } from '../lib/format'
+import { hasAired } from '../lib/airing'
 import { buzz } from '../lib/haptics'
 
 const STATES: { key: FollowState; labelKey: string }[] = [
@@ -28,7 +29,7 @@ function SeasonBlock({
   showId: number
 }) {
   const { t } = useTranslation()
-  const aired = episodes.filter((e) => e.airDate && new Date(e.airDate) <= new Date())
+  const aired = episodes.filter((e) => hasAired(e))
   const seen = aired.filter((e) => watched.has(e.id)).length
   const complete = aired.length > 0 && seen === aired.length
   const [open, setOpen] = useState(!complete && aired.length > 0)
@@ -58,7 +59,7 @@ function SeasonBlock({
       {open && (
         <div>
           {episodes.map((e) => {
-            const future = !e.airDate || new Date(e.airDate) > new Date()
+            const future = !hasAired(e)
             const seen = watched.has(e.id)
             return (
               <div
@@ -141,7 +142,7 @@ export default function ShowDetail() {
 
   if (isLoading || !show) return <Spinner />
 
-  const airedEps = show.episodes.filter((e) => e.season > 0 && e.airDate && new Date(e.airDate) <= new Date())
+  const airedEps = show.episodes.filter((e) => e.season > 0 && hasAired(e))
   const seenCount = airedEps.filter((e) => watched.has(e.id)).length
   const nextEp = [...airedEps].sort((a, b) => a.season - b.season || a.number - b.number).find((e) => !watched.has(e.id)) ?? null
   const followState = user?.follow?.state ?? null

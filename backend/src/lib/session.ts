@@ -48,7 +48,7 @@ export async function getSessionUser(request: FastifyRequest) {
   const session = await prisma.session.findUnique({
     where: { id: hashToken(token) },
     include: {
-      user: { select: { id: true, username: true, email: true, emailVerifiedAt: true, language: true, isAdmin: true, createdAt: true } },
+      user: { select: { id: true, username: true, email: true, emailVerifiedAt: true, language: true, timezone: true, isAdmin: true, createdAt: true } },
     },
   })
   if (!session) return null

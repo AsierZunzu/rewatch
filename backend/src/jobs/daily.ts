@@ -50,33 +50,75 @@ async function purgeExpiredTokens() {
   return count
 }
 
+// Air times for shows nobody has opened recently.
+//
+// getShowCached() only refreshes a show when someone views it, so a show that
+// is followed but watched entirely from the Up Next list would keep the coarse
+// origin-country fallback forever — meaning its new episodes surface hours late,
+// every week. Ended shows are skipped: their episodes aired long ago, so the
+// fallback and the exact instant are both firmly in the past.
+const AIR_TIME_TTL_MS = 7 * 24 * 60 * 60 * 1000
+const AIR_TIME_BATCH = 50
+
+async function refreshAirTimes(log: JobLog) {
+  const { syncShowAirTimes } = await import('../lib/catalog.js')
+  const shows = await prisma.show.findMany({
+    where: {
+      status: { notIn: ['Ended', 'Canceled'] },
+      follows: { some: { state: 'WATCHING' } },
+      OR: [{ airsCachedAt: null }, { airsCachedAt: { lt: new Date(Date.now() - AIR_TIME_TTL_MS) } }],
+    },
+    // Never-enriched shows first: they are the ones still on the coarse fallback.
+    orderBy: [{ airsCachedAt: { sort: 'asc', nulls: 'first' } }],
+    take: AIR_TIME_BATCH,
+    select: { tmdbId: true },
+  })
+  let done = 0
+  for (const show of shows) {
+    try {
+      await syncShowAirTimes(show.tmdbId)
+      done++
+    } catch (err) {
+      log.error(`air times failed for tmdb:${show.tmdbId}: ${(err as Error).message}`)
+    }
+  }
+  return done
+}
+
 const PUSH_T = {
   fr: {
     one: 'Nouvel épisode disponible',
-    many: (n: number) => `${n} épisodes sortent aujourd’hui`,
+    many: (n: number) => `${n} nouveaux épisodes disponibles`,
     more: (n: number) => `… et ${n} autres`,
   },
   en: {
     one: 'New episode available',
-    many: (n: number) => `${n} episodes air today`,
+    many: (n: number) => `${n} new episodes available`,
     more: (n: number) => `… and ${n} more`,
   },
   de: {
     one: 'Neue Folge verfügbar',
-    many: (n: number) => `${n} Folgen laufen heute`,
+    many: (n: number) => `${n} neue Folgen verfügbar`,
     more: (n: number) => `… und ${n} weitere`,
   },
 }
 
-// "New episode" push: today's releases for followed (WATCHING) shows,
-// grouped into one notification per subscribed user.
+// "New episode" push: episodes that have actually aired since the previous run,
+// for followed (WATCHING) shows, grouped into one notification per subscriber.
+//
+// A rolling 24h window rather than a calendar day: users are spread across
+// timezones, the job fires once at a fixed hour, and "aired in the last day" is
+// the same set for all of them. It also means the push only ever announces an
+// episode that is genuinely watchable — matching the Up Next gate.
+const PUSH_WINDOW_MS = 24 * 60 * 60 * 1000
+
 async function sendNewEpisodePushes() {
   const { sendPushToUser } = await import('../lib/push.js')
-  const today = new Date(new Date().toDateString())
-  const tomorrow = new Date(today.getTime() + 24 * 60 * 60 * 1000)
+  const now = new Date()
+  const since = new Date(now.getTime() - PUSH_WINDOW_MS)
 
   const episodes = await prisma.episode.findMany({
-    where: { airDate: { gte: today, lt: tomorrow }, season: { gt: 0 } },
+    where: { airsAt: { gt: since, lte: now }, season: { gt: 0 } },
     include: {
       show: {
         select: {
@@ -119,12 +161,18 @@ async function sendNewEpisodePushes() {
 export async function runDailyJob(log: JobLog = console): Promise<void> {
   const reminders = await sendVerifyReminders(log)
   const purged = await purgeExpiredTokens()
+  // Before the pushes: they announce episodes by airs_at, so refresh it first.
+  const refreshed = await refreshAirTimes(log).catch((err) => {
+    log.error(`air time refresh failed: ${(err as Error).message}`)
+    return 0
+  })
   const pushes = await sendNewEpisodePushes().catch((err) => {
     log.error(`new-episode push failed: ${(err as Error).message}`)
     return { users: 0, sent: 0 }
   })
   log.info(
-    `daily: ${reminders} reminder(s), ${purged} expired token(s) purged, release push → ${pushes.sent} delivery(ies) / ${pushes.users} user(s)`,
+    `daily: ${reminders} reminder(s), ${purged} expired token(s) purged, ${refreshed} show(s) air-time refreshed, ` +
+      `release push → ${pushes.sent} delivery(ies) / ${pushes.users} user(s)`,
   )
 }
 

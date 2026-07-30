@@ -9,6 +9,7 @@ export type AuthUser = {
   email: string | null
   emailVerifiedAt: Date | null
   language: string
+  timezone: string
   isAdmin: boolean
   createdAt: Date
 }
