@@ -3,8 +3,25 @@
 // import_jobs, idempotent DB writes.
 import { prisma } from './prisma.js'
 import { cacheMovie, cacheShow } from './catalog.js'
+import { TmdbError } from './tmdb.js'
 import { apiPost, getHistory, getHistorySince, getLastActivities, getRatings, getWatchlist } from './trakt.js'
 import { FollowState, Prisma } from '../generated/prisma/client.js'
+
+// An entry Trakt knows about but TMDB doesn't (deleted or merged entry).
+type SkippedItem = { kind: 'show' | 'movie'; tmdbId: number; title?: string }
+// The report is stored as JSON in import_jobs: list enough to act on, count the rest.
+const SKIPPED_REPORT_CAP = 50
+
+/**
+ * Whether a caching failure concerns this item alone. A 404 means TMDB has no
+ * such entry and no retry will change that, so the item is skipped and named in
+ * the report. Everything else (missing API key, rate limit, network) hits every
+ * other item just as hard: it stays fatal, so the job fails loudly instead of
+ * quietly dropping half the library.
+ */
+function missingOnTmdb(err: unknown): boolean {
+  return err instanceof TmdbError && err.status === 404
+}
 
 async function setProgress(jobId: number, phase: string, done: number, total: number) {
   await prisma.importJob.update({ where: { id: jobId }, data: { progress: { phase, done, total } } })
@@ -38,13 +55,45 @@ export function runTraktImport(jobId: number, userId: number): Promise<void> {
     for (const w of watchlist) if (w.type === 'show' && w.show?.ids.tmdb) showIds.add(w.show.ids.tmdb)
     for (const r of ratings) if (r.type === 'show' && r.show?.ids.tmdb) showIds.add(r.show.ids.tmdb)
 
+    // History carries display titles; watchlist and ratings only carry ids.
+    const titles = new Map<string, string>()
+    for (const h of history) {
+      if (h.show?.ids.tmdb) titles.set(`show:${h.show.ids.tmdb}`, h.show.title)
+      if (h.movie?.ids.tmdb) titles.set(`movie:${h.movie.ids.tmdb}`, h.movie.title)
+    }
+    const skipped: SkippedItem[] = []
+    const skippedKeys = new Set<string>()
+    const noteSkip = (kind: 'show' | 'movie', tmdbId: number) => {
+      const key = `${kind}:${tmdbId}`
+      if (skippedKeys.has(key)) return
+      skippedKeys.add(key)
+      skipped.push({ kind, tmdbId, title: titles.get(key) })
+    }
+
     let done = 0
     for (const tmdbId of showIds) {
       const existing = await prisma.show.findUnique({ where: { tmdbId } })
-      if (!existing) await cacheShow(tmdbId)
+      if (!existing) {
+        try {
+          await cacheShow(tmdbId)
+        } catch (err) {
+          if (!missingOnTmdb(err)) throw err
+          noteSkip('show', tmdbId)
+        }
+      }
       done++
       if (done % 5 === 0 || done === showIds.size) await setProgress(jobId, 'shows', done, showIds.size)
     }
+
+    // What actually landed in the cache. Follows and watch events carry foreign
+    // keys to shows/movies, so every write below is filtered against these sets
+    // rather than against the ids we merely tried: a show whose season fetch
+    // died halfway is still a usable row, and one we never got is not.
+    const cachedShowIds = new Set(
+      (
+        await prisma.show.findMany({ where: { tmdbId: { in: [...showIds] } }, select: { tmdbId: true } })
+      ).map((s) => s.tmdbId),
+    )
 
     // 2. Episode watch events (matched by show + season + number).
     const episodes = await prisma.episode.findMany({
@@ -76,14 +125,24 @@ export function runTraktImport(jobId: number, userId: number): Promise<void> {
     ]
     let doneMovies = 0
     const allMovieIds = [...new Set([...movieIds, ...watchlistMovieIds])]
+    const cachedMovieIds = new Set<number>()
     for (const tmdbId of allMovieIds) {
-      await cacheMovie(tmdbId)
+      try {
+        await cacheMovie(tmdbId)
+        cachedMovieIds.add(tmdbId)
+      } catch (err) {
+        if (!missingOnTmdb(err)) throw err
+        noteSkip('movie', tmdbId)
+      }
       doneMovies++
       if (doneMovies % 5 === 0 || doneMovies === allMovieIds.length)
         await setProgress(jobId, 'movies', doneMovies, allMovieIds.length)
     }
+    const importedWatchlistMovieIds = watchlistMovieIds.filter((id) => cachedMovieIds.has(id))
     const insertedMovies = await prisma.watchEvent.createMany({
-      data: movieEvents.map((m) => ({ userId, movieId: m.movieTmdbId, watchedAt: m.watchedAt })),
+      data: movieEvents
+        .filter((m) => cachedMovieIds.has(m.movieTmdbId))
+        .map((m) => ({ userId, movieId: m.movieTmdbId, watchedAt: m.watchedAt })),
       skipDuplicates: true,
     })
 
@@ -93,6 +152,7 @@ export function runTraktImport(jobId: number, userId: number): Promise<void> {
     const watchedShows = new Set(events.length ? episodes.filter((e) => events.some((ev) => ev.episodeId === e.id)).map((e) => e.showTmdbId) : [])
     for (const h of history) if (h.type === 'episode' && h.show?.ids.tmdb) watchedShows.add(h.show.ids.tmdb)
     for (const tmdbId of watchedShows) {
+      if (!cachedShowIds.has(tmdbId)) continue
       await prisma.follow.upsert({
         where: { userId_showTmdbId: { userId, showTmdbId: tmdbId } },
         create: { userId, showTmdbId: tmdbId, state: FollowState.WATCHING },
@@ -102,13 +162,14 @@ export function runTraktImport(jobId: number, userId: number): Promise<void> {
     }
     for (const w of watchlist) {
       if (w.type !== 'show' || !w.show?.ids.tmdb) continue
+      if (!cachedShowIds.has(w.show.ids.tmdb)) continue
       await prisma.follow.upsert({
         where: { userId_showTmdbId: { userId, showTmdbId: w.show.ids.tmdb } },
         create: { userId, showTmdbId: w.show.ids.tmdb, state: FollowState.FOR_LATER },
         update: {},
       })
     }
-    for (const tmdbId of watchlistMovieIds) {
+    for (const tmdbId of importedWatchlistMovieIds) {
       await prisma.movieWatchlistEntry.upsert({
         where: { userId_movieTmdbId: { userId, movieTmdbId: tmdbId } },
         create: { userId, movieTmdbId: tmdbId },
@@ -122,7 +183,19 @@ export function runTraktImport(jobId: number, userId: number): Promise<void> {
       const target = r.type === 'show' ? ('SHOW' as const) : r.type === 'movie' ? ('MOVIE' as const) : null
       const ref = r.type === 'show' ? r.show?.ids.tmdb : r.movie?.ids.tmdb
       if (!target || !ref) continue
-      if (target === 'MOVIE' && !allMovieIds.includes(ref)) await cacheMovie(ref)
+      if (target === 'SHOW') {
+        if (!cachedShowIds.has(ref)) continue
+      } else if (!cachedMovieIds.has(ref)) {
+        // Rated but never watched or watchlisted: not cached by the loops above.
+        try {
+          await cacheMovie(ref)
+          cachedMovieIds.add(ref)
+        } catch (err) {
+          if (!missingOnTmdb(err)) throw err
+          noteSkip('movie', ref)
+          continue
+        }
+      }
       await prisma.rating.upsert({
         where: { userId_target_targetRef: { userId, target, targetRef: ref } },
         create: { userId, target, targetRef: ref, value: r.rating, ratedAt: new Date(r.rated_at) },
@@ -133,9 +206,10 @@ export function runTraktImport(jobId: number, userId: number): Promise<void> {
 
     return {
       episodes: { imported: inserted.count, unmatched },
-      movies: { imported: insertedMovies.count, watchlist: watchlistMovieIds.length },
+      movies: { imported: insertedMovies.count, watchlist: importedWatchlistMovieIds.length },
       follows,
       ratings: ratingCount,
+      skipped: { total: skipped.length, items: skipped.slice(0, SKIPPED_REPORT_CAP) },
     }
   })
 }
@@ -254,7 +328,14 @@ export async function runTraktPull(userId: number): Promise<{ episodes: number; 
   for (const h of history) {
     if (h.type === 'episode' && h.show?.ids.tmdb && h.episode) {
       const showTmdbId = h.show.ids.tmdb
-      if (!(await prisma.show.findUnique({ where: { tmdbId: showTmdbId } }))) await cacheShow(showTmdbId)
+      if (!(await prisma.show.findUnique({ where: { tmdbId: showTmdbId } }))) {
+        try {
+          await cacheShow(showTmdbId)
+        } catch (err) {
+          if (!missingOnTmdb(err)) throw err
+          continue // gone from TMDB: skip this play, keep pulling the rest
+        }
+      }
       const ep = await prisma.episode.findFirst({
         where: { showTmdbId, season: h.episode.season, number: h.episode.number },
       })
@@ -277,7 +358,12 @@ export async function runTraktPull(userId: number): Promise<{ episodes: number; 
       episodes++
     } else if (h.type === 'movie' && h.movie?.ids.tmdb) {
       const movieTmdbId = h.movie.ids.tmdb
-      await cacheMovie(movieTmdbId)
+      try {
+        await cacheMovie(movieTmdbId)
+      } catch (err) {
+        if (!missingOnTmdb(err)) throw err
+        continue // gone from TMDB: skip this play, keep pulling the rest
+      }
       const watchedAt = new Date(h.watched_at)
       const existing = await prisma.watchEvent.findFirst({
         where: {
