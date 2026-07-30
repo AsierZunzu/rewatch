@@ -1,8 +1,11 @@
-// One-off: backfill fr/en translations for already-cached shows and movies.
+// One-off: backfill translations for already-cached shows and movies, in every
+// language the instance supports. Run it after adding one to LANGS, otherwise
+// entries cached before the change stay untranslated for it.
 // Idempotent (upserts) — safe to re-run after a failure.
 import 'dotenv/config'
 import { prisma } from '../lib/prisma.js'
-import { cacheShowTranslations, cacheMovie, LANGS } from '../lib/catalog.js'
+import { cacheShowTranslations, cacheMovie } from '../lib/catalog.js'
+import { LANGS } from '../lib/langs.js'
 
 const shows = await prisma.show.findMany({
   select: { tmdbId: true, name: true, translations: { select: { lang: true } } },

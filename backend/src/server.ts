@@ -2,9 +2,11 @@ import 'dotenv/config'
 import { buildApp } from './app.js'
 import { prisma } from './lib/prisma.js'
 import { loadSettings } from './lib/settings.js'
+import { startDailySchedule } from './lib/scheduler.js'
 
 await loadSettings()
 const app = await buildApp()
+startDailySchedule(app)
 
 // Import jobs run in-process; any job still RUNNING at boot was killed by a
 // restart or crash. Fail it so the user can retry (imports are idempotent) —

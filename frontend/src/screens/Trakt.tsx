@@ -38,6 +38,7 @@ function JobCard({ jobId, source }: { jobId: number; source: 'TRAKT' | 'TRAKT_EX
 
   if (job?.status === 'DONE') {
     const r = job.report as Record<string, { imported?: number; episodes?: number; movies?: number }> | null
+    const skipped = r?.skipped as { total?: number; items?: { kind: string; tmdbId: number; title?: string }[] } | undefined
     return (
       <div className="bg-card rounded-[18px] border border-line p-4">
         <div className="flex items-center gap-3">
@@ -61,6 +62,25 @@ function JobCard({ jobId, source }: { jobId: number; source: 'TRAKT' | 'TRAKT_EX
             </div>
           </div>
         </div>
+        {!!skipped?.total && (
+          <div className="border-line mt-3 border-t pt-3">
+            <div className="text-[12.5px] font-bold">{t('trakt.skippedTitle', { count: skipped.total })}</div>
+            <div className="text-muted mt-0.5 text-[12px]">{t('trakt.skippedText')}</div>
+            <ul className="text-muted mt-1.5 flex flex-col gap-0.5 text-[12px]">
+              {skipped.items?.map((s) => (
+                <li key={`${s.kind}:${s.tmdbId}`} className="truncate">
+                  {s.title ?? t(s.kind === 'show' ? 'trakt.skippedShow' : 'trakt.skippedMovie')}{' '}
+                  <span className="opacity-60">#{s.tmdbId}</span>
+                </li>
+              ))}
+            </ul>
+            {skipped.total > (skipped.items?.length ?? 0) && (
+              <div className="text-muted mt-1 text-[12px] opacity-60">
+                {t('trakt.skippedMore', { count: skipped.total - (skipped.items?.length ?? 0) })}
+              </div>
+            )}
+          </div>
+        )}
         <button
           type="button"
           onClick={() => qc.invalidateQueries({ queryKey: ['trakt-status'] })}

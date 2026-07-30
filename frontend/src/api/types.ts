@@ -3,7 +3,9 @@ export type User = {
   username: string
   email: string | null
   emailVerified: boolean
-  language: 'fr' | 'en'
+  // Plain string, not Lang: a row could hold a language this build no longer
+  // ships. Narrow it with toLang() before using it.
+  language: string
   isAdmin: boolean
   blocked: boolean
   verifyDeadline: string | null
@@ -57,6 +59,8 @@ export type WatchlistShow = {
   nextEpisode: { id: number; season: number; number: number; name: string | null; airDate: string | null }
   seasonRemaining: number
   totalRemaining: number
+  seasonRemainingMinutes: number
+  totalRemainingMinutes: number
   lastWatchedAt: string | null
 }
 export type Watchlist = { shows: WatchlistShow[]; movies: Movie[]; archivedMovies: Movie[] }

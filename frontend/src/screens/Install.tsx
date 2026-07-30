@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { useTranslation } from 'react-i18next'
 import { canPromptInstall, detectPlatform, isStandalone, onInstallPromptReady, promptInstall } from '../lib/install'
+import { screenshotLang } from '../i18n'
 
 type Platform = 'ios' | 'android' | 'desktop'
 
@@ -28,7 +29,8 @@ export default function Install() {
   const [platform, setPlatform] = useState<Platform>(detectPlatform())
   const [, setPromptReady] = useState(canPromptInstall())
   const [installed, setInstalled] = useState(false)
-  const lang = i18n.language === 'fr' ? 'fr' : 'en'
+  // Screenshots only exist in some languages; the rest fall back to English.
+  const lang = screenshotLang(i18n.language)
 
   useEffect(() => onInstallPromptReady(() => setPromptReady(true)), [])
 

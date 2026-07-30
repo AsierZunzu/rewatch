@@ -8,6 +8,7 @@ import { ScreenTitle, Spinner } from '../components/ui'
 import { getCurrentSubscription, pushSupported, subscribeToPush, unsubscribeFromPush } from '../lib/push'
 import { isStandalone } from '../lib/install'
 import { getThemePref, setThemePref, type ThemePref } from '../lib/theme'
+import { INTL_LOCALE, LANGS, toLang, type Lang } from '../i18n'
 
 function NotificationsRow() {
   const { t } = useTranslation()
@@ -85,7 +86,6 @@ function NotificationsRow() {
   )
 }
 
-// FR/EN segment — persists on the account and switches the UI immediately.
 function ThemeRow() {
   const { t } = useTranslation()
   const [pref, setPref] = useState<ThemePref>(getThemePref())
@@ -116,12 +116,13 @@ function ThemeRow() {
   )
 }
 
+// Language segment: persists on the account and switches the UI immediately.
 function LanguageRow() {
   const { t, i18n } = useTranslation()
   const qc = useQueryClient()
-  const current = i18n.language === 'fr' ? 'fr' : 'en'
+  const current = toLang(i18n.language)
 
-  const change = async (lang: 'fr' | 'en') => {
+  const change = async (lang: Lang) => {
     if (lang === current) return
     await i18n.changeLanguage(lang)
     await api.patch('/api/auth/language', { language: lang })
@@ -134,7 +135,7 @@ function LanguageRow() {
     <div className="flex w-full items-center justify-between border-t border-white/5 px-4 py-3.5">
       <span className="text-sm font-semibold">{t('profile.language')}</span>
       <div className="bg-track flex rounded-[10px] p-0.5">
-        {(['fr', 'en'] as const).map((lang) => (
+        {LANGS.map((lang) => (
           <button
             key={lang}
             type="button"
@@ -436,7 +437,7 @@ export default function Profile() {
             <div className="text-muted text-[13px] font-semibold">
               {t('profile.memberSince', {
                 username: me.username,
-                date: new Intl.DateTimeFormat(i18n.language === 'fr' ? 'fr-FR' : 'en-GB', {
+                date: new Intl.DateTimeFormat(INTL_LOCALE[toLang(i18n.language)], {
                   month: 'long',
                   year: 'numeric',
                 }).format(new Date(me.createdAt)),
@@ -447,7 +448,7 @@ export default function Profile() {
 
         <div className="flex gap-2.5">
           <div className="bg-card flex-1 rounded-[14px] border border-line p-3 text-center">
-            <div className="text-accent text-[17px] font-extrabold">{days !== null ? `${days} ${i18n.language === 'fr' ? 'j' : 'd'}` : '…'}</div>
+            <div className="text-accent text-[17px] font-extrabold">{days !== null ? `${days} ${t('units.dayShort')}` : '…'}</div>
             <div className="text-muted text-[10.5px] font-bold">{t('profile.screenTime')}</div>
           </div>
           <div className="bg-card flex-1 rounded-[14px] border border-line p-3 text-center">
@@ -478,6 +479,13 @@ export default function Profile() {
             <div className="text-left">
               <span className="text-sm font-semibold">{t('profile.traktRow')}</span>
               <div className="text-dim mt-0.5 text-[11px] font-semibold">{t('profile.traktRowHint')}</div>
+            </div>
+            <span className="text-dim">›</span>
+          </Link>
+          <Link viewTransition to="/calendar-feed" className="flex w-full items-center justify-between gap-3 border-t border-white/5 px-4 py-3.5">
+            <div className="text-left">
+              <span className="text-sm font-semibold">{t('profile.calendarFeedRow')}</span>
+              <div className="text-dim mt-0.5 text-[11px] font-semibold">{t('profile.calendarFeedRowHint')}</div>
             </div>
             <span className="text-dim">›</span>
           </Link>

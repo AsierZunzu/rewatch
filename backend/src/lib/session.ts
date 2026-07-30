@@ -11,7 +11,7 @@ function hashToken(token: string) {
   return createHash('sha256').update(token).digest('hex')
 }
 
-export async function createSession(reply: FastifyReply, userId: number) {
+export async function createSession(request: FastifyRequest, reply: FastifyReply, userId: number) {
   const token = randomBytes(32).toString('hex')
   await prisma.session.create({
     data: {
@@ -24,7 +24,12 @@ export async function createSession(reply: FastifyReply, userId: number) {
     path: '/',
     httpOnly: true,
     sameSite: 'lax',
-    secure: process.env.NODE_ENV === 'production',
+    // Follow the scheme the client actually used (X-Forwarded-Proto behind a
+    // reverse proxy, see trustProxy). This used to key on NODE_ENV, which the
+    // Docker image always sets to "production": instances served over plain
+    // HTTP got a Secure cookie, the browser dropped it, and login silently
+    // bounced back to the login screen.
+    secure: request.protocol === 'https',
     maxAge: SESSION_TTL_MS / 1000,
   })
 }

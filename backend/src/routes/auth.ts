@@ -4,7 +4,8 @@ import { z } from 'zod'
 import { prisma } from '../lib/prisma.js'
 import { createSession, destroySession } from '../lib/session.js'
 import { createAuthToken, consumeAuthToken } from '../lib/auth-tokens.js'
-import { sendResetEmail, sendVerificationEmail, type Lang } from '../lib/mailer.js'
+import { sendResetEmail, sendVerificationEmail } from '../lib/mailer.js'
+import { DEFAULT_LANG, LANGS, toLang } from '../lib/langs.js'
 import { isBlocked, verifyDeadline } from '../lib/verification.js'
 import { getSetting } from '../lib/settings.js'
 
@@ -15,7 +16,7 @@ const usernameSchema = z
   .regex(/^[a-zA-Z0-9_.-]+$/, 'letters, digits, _ . - only')
 const passwordSchema = z.string().min(8).max(128)
 const emailSchema = z.email().max(254).transform((e) => e.toLowerCase())
-const languageSchema = z.enum(['fr', 'en'])
+const languageSchema = z.enum(LANGS)
 
 // Strict limit on bruteforce/mail-spam sensitive routes (per IP).
 const strictRateLimit = {
@@ -56,7 +57,7 @@ export default async function authRoutes(app: FastifyInstance) {
         username: usernameSchema,
         password: passwordSchema,
         email: emailSchema,
-        language: languageSchema.default('en'),
+        language: languageSchema.default(DEFAULT_LANG),
       })
       .safeParse(request.body)
     if (!parsed.success) {
@@ -81,7 +82,7 @@ export default async function authRoutes(app: FastifyInstance) {
       app.log.error(err, 'verification email failed'),
     )
 
-    await createSession(reply, user.id)
+    await createSession(request, reply, user.id)
     return reply.code(201).send(publicUser(user))
   })
 
@@ -98,7 +99,7 @@ export default async function authRoutes(app: FastifyInstance) {
       return reply.code(401).send({ error: 'invalid_credentials' })
     }
 
-    await createSession(reply, user.id)
+    await createSession(request, reply, user.id)
     return publicUser(user)
   })
 
@@ -144,7 +145,7 @@ export default async function authRoutes(app: FastifyInstance) {
       if (!user.email) return reply.code(400).send({ error: 'no_email' })
       if (user.emailVerifiedAt) return { ok: true }
       const token = await createAuthToken(user.id, 'VERIFY_EMAIL')
-      await sendVerificationEmail(user.email, user.username, token, user.language as Lang)
+      await sendVerificationEmail(user.email, user.username, token, toLang(user.language))
       return { ok: true }
     },
   )
@@ -162,7 +163,7 @@ export default async function authRoutes(app: FastifyInstance) {
       data: { email: body.data.email, emailVerifiedAt: null },
     })
     const token = await createAuthToken(user.id, 'VERIFY_EMAIL')
-    await sendVerificationEmail(body.data.email, user.username, token, user.language as Lang)
+    await sendVerificationEmail(body.data.email, user.username, token, toLang(user.language))
     return publicUser(user)
   })
 
@@ -178,7 +179,7 @@ export default async function authRoutes(app: FastifyInstance) {
     // address and capture a reset link for their account.
     if (user?.email && user.emailVerifiedAt) {
       const token = await createAuthToken(user.id, 'RESET_PASSWORD')
-      sendResetEmail(user.email, user.username, token, user.language as Lang).catch((err) =>
+      sendResetEmail(user.email, user.username, token, toLang(user.language)).catch((err) =>
         app.log.error(err, 'reset email failed'),
       )
     }

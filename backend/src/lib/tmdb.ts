@@ -6,9 +6,8 @@ import { getSetting } from './settings.js'
 const BASE = 'https://api.themoviedb.org/3'
 // Instance default (base cache rows); per-call override for translations.
 export const defaultLanguage = () => getSetting('TMDB_LANGUAGE') ?? 'en-US'
-export const LANG_TO_TMDB: Record<string, string> = { fr: 'fr-FR', en: 'en-US' }
 
-class TmdbError extends Error {
+export class TmdbError extends Error {
   constructor(
     public status: number,
     message: string,

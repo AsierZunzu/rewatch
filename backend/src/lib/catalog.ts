@@ -3,10 +3,9 @@
 // are cached for every supported language and overlaid per profile language.
 import { prisma } from './prisma.js'
 import * as tmdb from './tmdb.js'
+import { LANGS, LANG_TO_TMDB } from './langs.js'
 
 const STALE_MS = 24 * 60 * 60 * 1000 // refresh after 24h (ongoing shows)
-export const LANGS = ['fr', 'en'] as const
-export type Lang = (typeof LANGS)[number]
 
 function parseDate(d: string | null | undefined): Date | null {
   return d ? new Date(d) : null
@@ -78,7 +77,7 @@ export async function cacheShowTranslations(tmdbId: number) {
   const byKey = new Map(episodes.map((e) => [`${e.season}:${e.number}`, e.id]))
 
   for (const lang of LANGS) {
-    const tmdbLang = tmdb.LANG_TO_TMDB[lang]
+    const tmdbLang = LANG_TO_TMDB[lang]
     const localized = await tmdb.getShow(tmdbId, tmdbLang)
     await prisma.showTranslation.upsert({
       where: { showTmdbId_lang: { showTmdbId: tmdbId, lang } },
@@ -122,7 +121,7 @@ export async function cacheMovie(tmdbId: number) {
   const saved = await prisma.movie.upsert({ where: { tmdbId }, create: { tmdbId, ...data }, update: data })
 
   for (const lang of LANGS) {
-    const localized = await tmdb.getMovie(tmdbId, tmdb.LANG_TO_TMDB[lang])
+    const localized = await tmdb.getMovie(tmdbId, LANG_TO_TMDB[lang])
     await prisma.movieTranslation.upsert({
       where: { movieTmdbId_lang: { movieTmdbId: tmdbId, lang } },
       create: {
