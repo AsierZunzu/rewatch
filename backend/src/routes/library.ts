@@ -4,6 +4,7 @@ import { z } from 'zod'
 import { prisma } from '../lib/prisma.js'
 import { Prisma } from '../generated/prisma/client.js'
 import { localizeEpisodes, localizeMovies, localizeShows } from '../lib/catalog.js'
+import { FALLBACK_EPISODE_MIN } from '../lib/runtimes.js'
 
 const idParam = z.object({ id: z.coerce.number().int().positive() })
 
@@ -16,6 +17,8 @@ type NextEpisodeRow = {
   air_date: Date | null
   season_remaining: bigint
   total_remaining: bigint
+  season_remaining_minutes: bigint | null
+  total_remaining_minutes: bigint | null
   last_watched_at: Date | null
 }
 
@@ -49,7 +52,12 @@ export default async function libraryRoutes(app: FastifyInstance) {
       counts AS (
         SELECT u.show_tmdb_id,
           count(*) AS total_remaining,
-          count(*) FILTER (WHERE u.season = n.season) AS season_remaining
+          count(*) FILTER (WHERE u.season = n.season) AS season_remaining,
+          -- Same aggregate pass as the counts: the time left is the counts
+          -- weighted by episode runtime, so both always describe the same set.
+          sum(COALESCE(u.runtime, ${FALLBACK_EPISODE_MIN})) AS total_remaining_minutes,
+          sum(COALESCE(u.runtime, ${FALLBACK_EPISODE_MIN})) FILTER (WHERE u.season = n.season)
+            AS season_remaining_minutes
         FROM unseen u
         JOIN next_ep n USING (show_tmdb_id)
         GROUP BY u.show_tmdb_id
@@ -64,7 +72,9 @@ export default async function libraryRoutes(app: FastifyInstance) {
       SELECT
         n.show_tmdb_id, n.id AS episode_id, n.season, n.number,
         n.name AS episode_name, n.air_date,
-        c.season_remaining, c.total_remaining, a.last_watched_at
+        c.season_remaining, c.total_remaining,
+        c.season_remaining_minutes, c.total_remaining_minutes,
+        a.last_watched_at
       FROM next_ep n
       JOIN counts c USING (show_tmdb_id)
       LEFT JOIN activity a USING (show_tmdb_id)
@@ -106,6 +116,8 @@ export default async function libraryRoutes(app: FastifyInstance) {
         },
         seasonRemaining: Number(r.season_remaining),
         totalRemaining: Number(r.total_remaining),
+        seasonRemainingMinutes: Number(r.season_remaining_minutes ?? 0),
+        totalRemainingMinutes: Number(r.total_remaining_minutes ?? 0),
         lastWatchedAt: r.last_watched_at,
       })),
       movies,
