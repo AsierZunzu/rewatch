@@ -6,6 +6,7 @@ export type User = {
   // Plain string, not Lang: a row could hold a language this build no longer
   // ships. Narrow it with toLang() before using it.
   language: string
+  timezone: string
   isAdmin: boolean
   blocked: boolean
   verifyDeadline: string | null
@@ -31,7 +32,10 @@ export type Episode = {
   season: number
   number: number
   name: string | null
+  /** Calendar date in the show's own country — for display only. */
   airDate: string | null
+  /** Absolute instant it aired. Use `hasAired()`, never `airDate`, to test this. */
+  airsAt: string | null
   runtime: number | null
 }
 
@@ -61,6 +65,7 @@ export type WatchlistShow = {
   totalRemaining: number
   seasonRemainingMinutes: number
   totalRemainingMinutes: number
+  isSeasonFinale: boolean
   lastWatchedAt: string | null
 }
 export type Watchlist = { shows: WatchlistShow[]; movies: Movie[]; archivedMovies: Movie[] }

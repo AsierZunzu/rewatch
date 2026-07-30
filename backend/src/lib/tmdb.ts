@@ -47,6 +47,7 @@ export type TmdbShow = {
   status: string
   first_air_date: string | null
   episode_run_time: number[]
+  origin_country: string[] // ISO 3166-1 alpha-2; first entry is the primary one
   networks: { name: string }[]
   seasons: { season_number: number; episode_count: number }[]
 }

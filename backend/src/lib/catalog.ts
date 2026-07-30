@@ -4,6 +4,8 @@
 import { prisma } from './prisma.js'
 import * as tmdb from './tmdb.js'
 import { LANGS, LANG_TO_TMDB } from './langs.js'
+import { getShowAirTimes } from './trakt.js'
+import { applyTraktInstantsSql, resolveAirsAtSql } from './airing.js'
 
 const STALE_MS = 24 * 60 * 60 * 1000 // refresh after 24h (ongoing shows)
 
@@ -30,6 +32,7 @@ export async function cacheShow(tmdbId: number, tvdbId?: number) {
     status: show.status,
     network: show.networks[0]?.name ?? null,
     firstAirYear: show.first_air_date ? Number(show.first_air_date.slice(0, 4)) : null,
+    originCountry: show.origin_country[0] ?? null,
   }
   await prisma.show.upsert({
     where: { tmdbId },
@@ -60,12 +63,42 @@ export async function cacheShow(tmdbId: number, tvdbId?: number) {
     }
   }
 
+  // After the upserts, so it resolves against the air dates just written.
+  await syncShowAirTimes(tmdbId)
+
   await cacheShowTranslations(tmdbId)
 
   return prisma.show.findUniqueOrThrow({
     where: { tmdbId },
     include: { episodes: { orderBy: [{ season: 'asc' }, { number: 'asc' }] } },
   })
+}
+
+/**
+ * Refreshes when this show's episodes actually aired.
+ *
+ * TMDB publishes no broadcast time at all, so the exact instants come from
+ * Trakt. When Trakt is unconfigured, rate-limited, or does not know the show,
+ * this still runs: the resolver falls back to the show's slot or, failing that,
+ * the end of the air date in its origin country. Always leaves every episode
+ * with an `airs_at`, so no caller has to special-case missing air-time data.
+ */
+export async function syncShowAirTimes(tmdbId: number) {
+  const air = await getShowAirTimes(tmdbId)
+  if (air) {
+    await prisma.show.update({
+      where: { tmdbId },
+      data: {
+        airsTime: air.airs?.time ?? null,
+        airsTimezone: air.airs?.timezone ?? null,
+        // Stamped only on a real answer, so `airsCachedAt IS NULL` keeps
+        // meaning "never enriched" for the daily backfill to find.
+        airsCachedAt: new Date(),
+      },
+    })
+    await prisma.$executeRaw(applyTraktInstantsSql(tmdbId, air.firstAired))
+  }
+  await prisma.$executeRaw(resolveAirsAtSql(tmdbId))
 }
 
 /** Fetches the show in every supported language and upserts translation rows. */
@@ -170,8 +203,12 @@ export async function localizeShows<T extends { tmdbId: number; name: string; ov
     if (!t) return s
     return {
       ...s,
-      name: t.name,
-      ...('overview' in s ? { overview: t.overview ?? s.overview } : {}),
+      // TMDB answers with an empty string, not null, for a field it has no
+      // translation of. So "" means untranslated and has to fall back to the
+      // base row exactly like a missing value would: `??` alone let it through
+      // and blanked the synopsis. Same reasoning as the genres line below.
+      name: t.name || s.name,
+      ...('overview' in s ? { overview: t.overview || s.overview } : {}),
       ...('genres' in s ? { genres: t.genres.length ? t.genres : s.genres } : {}),
     }
   })
@@ -206,8 +243,9 @@ export async function localizeMovies<T extends { tmdbId: number; title: string; 
     if (!t) return m
     return {
       ...m,
-      title: t.title,
-      ...('overview' in m ? { overview: t.overview ?? m.overview } : {}),
+      // Empty string from TMDB means untranslated — see localizeShows above.
+      title: t.title || m.title,
+      ...('overview' in m ? { overview: t.overview || m.overview } : {}),
       ...('genres' in m ? { genres: t.genres.length ? t.genres : m.genres } : {}),
     }
   })
