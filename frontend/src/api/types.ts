@@ -65,6 +65,7 @@ export type WatchlistShow = {
   totalRemaining: number
   seasonRemainingMinutes: number
   totalRemainingMinutes: number
+  isSeasonFinale: boolean
   lastWatchedAt: string | null
 }
 export type Watchlist = { shows: WatchlistShow[]; movies: Movie[]; archivedMovies: Movie[] }
