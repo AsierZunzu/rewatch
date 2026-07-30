@@ -1,17 +1,27 @@
-// Daily job — run by a systemd timer in prod (`node dist/jobs/daily.js`),
-// manually in dev. Idempotent: safe to re-run without double sends.
+// Daily job: release pushes, verification reminders, token housekeeping.
+//
+// Two ways in, one body. `node dist/jobs/daily.js` is the one-shot command an
+// external cron or systemd timer calls; DAILY_JOB_AT runs the same function
+// from inside the server process. Enabling both means two runs a day, which is
+// why the schedule is opt-in rather than on by default.
+//
+// Reminders and the token purge are idempotent. The release push is not: it
+// sends today's airings to every subscriber, so a second run in the same day
+// notifies everyone twice.
 import 'dotenv/config'
+import { fileURLToPath } from 'node:url'
 import { prisma } from '../lib/prisma.js'
 import { loadSettings } from '../lib/settings.js'
 import { createAuthToken } from '../lib/auth-tokens.js'
 import { sendVerifyReminderEmail, type Lang } from '../lib/mailer.js'
 import { REMINDER_BEFORE_MS, VERIFY_GRACE_MS } from '../lib/verification.js'
 
-await loadSettings()
+/** Console when run as a command, the Fastify logger when run in-process. */
+export type JobLog = { info: (msg: string) => void; error: (msg: string) => void }
 
 // Verification reminder at D-1 before lockout: unverified accounts whose
 // deadline (createdAt + 7d) falls within the next 24h, never reminded before.
-async function sendVerifyReminders() {
+async function sendVerifyReminders(log: JobLog) {
   const now = Date.now()
   const users = await prisma.user.findMany({
     where: {
@@ -28,7 +38,7 @@ async function sendVerifyReminders() {
     const token = await createAuthToken(user.id, 'VERIFY_EMAIL')
     await sendVerifyReminderEmail(user.email!, user.username, token, user.language as Lang)
     await prisma.user.update({ where: { id: user.id }, data: { verifyReminderSentAt: new Date() } })
-    console.log(`verification reminder sent → ${user.username}`)
+    log.info(`verification reminder sent → ${user.username}`)
   }
   return users.length
 }
@@ -98,11 +108,24 @@ async function sendNewEpisodePushes() {
   return { users: byUser.size, sent }
 }
 
-const reminders = await sendVerifyReminders()
-const purged = await purgeExpiredTokens()
-const pushes = await sendNewEpisodePushes().catch((err) => {
-  console.error('new-episode push failed:', (err as Error).message)
-  return { users: 0, sent: 0 }
-})
-console.log(`daily: ${reminders} reminder(s), ${purged} expired token(s) purged, release push → ${pushes.sent} delivery(ies) / ${pushes.users} user(s)`)
-await prisma.$disconnect()
+/** The whole job. Settings must already be loaded. Never disconnects Prisma:
+ *  in-process it is the server's own connection. */
+export async function runDailyJob(log: JobLog = console): Promise<void> {
+  const reminders = await sendVerifyReminders(log)
+  const purged = await purgeExpiredTokens()
+  const pushes = await sendNewEpisodePushes().catch((err) => {
+    log.error(`new-episode push failed: ${(err as Error).message}`)
+    return { users: 0, sent: 0 }
+  })
+  log.info(
+    `daily: ${reminders} reminder(s), ${purged} expired token(s) purged, release push → ${pushes.sent} delivery(ies) / ${pushes.users} user(s)`,
+  )
+}
+
+// Run as a command: own the settings load and the disconnect. Imported by the
+// scheduler instead, which already has both.
+if (process.argv[1] === fileURLToPath(import.meta.url)) {
+  await loadSettings()
+  await runDailyJob()
+  await prisma.$disconnect()
+}
