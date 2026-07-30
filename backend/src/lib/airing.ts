@@ -8,6 +8,57 @@
 // which *local day* something falls in (calendar headings, "today's releases").
 import { Prisma } from '../generated/prisma/client.js'
 
+// ——— Providers ———
+
+/**
+ * Sources that hand us a real per-episode instant, best first.
+ *
+ * The order *is* the precedence: when both providers date the same episode, the
+ * earlier entry wins, and the later one only fills what the earlier one has no
+ * answer for. Trakt leads because its `first_aired` is a genuine per-episode
+ * field — TVmaze's `airstamp` is largely the weekly slot projected onto each
+ * episode's date, so it is a better schedule than it is a record of the past.
+ * Flip this array to change the policy; nothing else encodes an ordering.
+ */
+export const EXACT_SOURCES = ['TRAKT', 'TVMAZE'] as const
+export type ExactAirsAtSource = (typeof EXACT_SOURCES)[number]
+
+/** What one provider knows about a show. */
+export type ShowAirTimes = {
+  /** The show's weekly slot, local to `timezone`. Null when the provider has none. */
+  airs: { time: string; timezone: string } | null
+  /** "season:number" → exact UTC instant. Episodes it cannot date are absent. */
+  firstAired: Map<string, Date>
+}
+
+export type ProviderAirTimes = ShowAirTimes & { source: ExactAirsAtSource }
+export type ExactInstant = { at: Date; source: ExactAirsAtSource }
+
+/** `EXACT_SOURCES` as SQL literals, for `airs_at_source IN (…)`. */
+const exactSourcesSql = Prisma.join(EXACT_SOURCES.map((s) => Prisma.sql`${s}::"AirsAtSource"`))
+
+/**
+ * Folds every provider's answer into the one we store, by `EXACT_SOURCES` order.
+ *
+ * Merging per episode rather than picking a single winning provider matters:
+ * Trakt tends to know the back catalogue and TVmaze the upcoming schedule, so a
+ * show often needs both to be fully dated. The slot is *not* merged field by
+ * field — `time` and `timezone` only mean something together, so they travel as
+ * a pair from the best provider that has one.
+ */
+export function mergeAirTimes(providers: readonly ProviderAirTimes[]) {
+  const ranked = [...providers].sort((a, b) => EXACT_SOURCES.indexOf(a.source) - EXACT_SOURCES.indexOf(b.source))
+  const instants = new Map<string, ExactInstant>()
+  let airs: ShowAirTimes['airs'] = null
+  for (const provider of ranked) {
+    airs ??= provider.airs
+    for (const [key, at] of provider.firstAired) {
+      if (!instants.has(key)) instants.set(key, { at, source: provider.source })
+    }
+  }
+  return { airs, instants, answered: ranked.map((p) => p.source) }
+}
+
 /**
  * Origin country → the IANA zone whose end-of-day we treat as the latest moment
  * an episode dated D could still have aired.
@@ -83,9 +134,10 @@ const countryTzTable = Prisma.sql`
 /**
  * Recomputes `airs_at` for one show's episodes, best source first:
  *
- *   1. TRAKT    — a per-episode `first_aired`, already UTC and already accounting
- *                 for the show's country and the DST in force on that date. Rows
- *                 carrying it are left untouched; nothing here improves on it.
+ *   1. EXACT    — a per-episode instant from a provider (Trakt's `first_aired`,
+ *                 TVmaze's `airstamp`), already UTC and already accounting for
+ *                 the show's country and the DST in force on that date. Rows
+ *                 carrying one are left untouched; nothing here improves on it.
  *   2. SCHEDULE — `air_date` + the show's broadcast slot, read in the show's own
  *                 timezone. Resolved per episode, so a January and a July episode
  *                 correctly land on different UTC offsets.
@@ -101,13 +153,13 @@ export function resolveAirsAtSql(showTmdbId: number) {
     UPDATE episodes e
     SET
       airs_at = CASE
-        WHEN e.airs_at_source = 'TRAKT' THEN e.airs_at
+        WHEN e.airs_at_source IN (${exactSourcesSql}) THEN e.airs_at
         WHEN s.airs_time IS NOT NULL AND s.airs_timezone IS NOT NULL
           THEN (e.air_date + s.airs_time::time) AT TIME ZONE s.airs_timezone
         ELSE (e.air_date + interval '1 day') AT TIME ZONE COALESCE(tz.zone, ${UNKNOWN_COUNTRY_TZ})
       END,
       airs_at_source = CASE
-        WHEN e.airs_at_source = 'TRAKT' THEN 'TRAKT'::"AirsAtSource"
+        WHEN e.airs_at_source IN (${exactSourcesSql}) THEN e.airs_at_source
         WHEN s.airs_time IS NOT NULL AND s.airs_timezone IS NOT NULL THEN 'SCHEDULE'::"AirsAtSource"
         ELSE 'FALLBACK'::"AirsAtSource"
       END
@@ -120,31 +172,42 @@ export function resolveAirsAtSql(showTmdbId: number) {
 }
 
 /**
- * Writes Trakt's exact per-episode instants in one statement, and clears the
- * TRAKT marking everywhere else for this show so `resolveAirsAtSql` recomputes
- * those rows — an episode Trakt has dropped or rescheduled must not keep an
- * instant derived from its old air date.
+ * Writes the merged per-episode instants in one statement, and clears the marking
+ * on rows the answering providers no longer vouch for so `resolveAirsAtSql`
+ * recomputes them — an episode Trakt or TVmaze has dropped or rescheduled must
+ * not keep an instant derived from its old air date.
+ *
+ * `answered` lists the providers that actually replied. Only their rows are
+ * cleared: a provider that is rate-limited or down says nothing about the
+ * episodes it enriched last time, and wiping those would silently demote a show
+ * to the coarse fallback until the next sync.
  */
-export function applyTraktInstantsSql(showTmdbId: number, firstAired: Map<string, Date>) {
-  const rows = [...firstAired].map(([key, at]) => {
+export function applyExactInstantsSql(
+  showTmdbId: number,
+  instants: Map<string, ExactInstant>,
+  answered: readonly ExactAirsAtSource[],
+) {
+  if (answered.length === 0) return null
+  const sources = Prisma.join(answered.map((s) => Prisma.sql`${s}::"AirsAtSource"`))
+  const rows = [...instants].map(([key, { at, source }]) => {
     const [season, number] = key.split(':').map(Number)
-    return Prisma.sql`(${season}::int, ${number}::int, ${at}::timestamptz)`
+    return Prisma.sql`(${season}::int, ${number}::int, ${at}::timestamptz, ${source}::"AirsAtSource")`
   })
   if (rows.length === 0) {
     return Prisma.sql`
       UPDATE episodes SET airs_at_source = NULL
-      WHERE show_tmdb_id = ${showTmdbId} AND airs_at_source = 'TRAKT'
+      WHERE show_tmdb_id = ${showTmdbId} AND airs_at_source IN (${sources})
     `
   }
   return Prisma.sql`
-    WITH incoming(season, number, airs_at) AS (VALUES ${Prisma.join(rows)}),
+    WITH incoming(season, number, airs_at, source) AS (VALUES ${Prisma.join(rows)}),
     cleared AS (
       UPDATE episodes e SET airs_at_source = NULL
-      WHERE e.show_tmdb_id = ${showTmdbId} AND e.airs_at_source = 'TRAKT'
+      WHERE e.show_tmdb_id = ${showTmdbId} AND e.airs_at_source IN (${sources})
         AND NOT EXISTS (SELECT 1 FROM incoming i WHERE i.season = e.season AND i.number = e.number)
     )
     UPDATE episodes e
-    SET airs_at = i.airs_at, airs_at_source = 'TRAKT'
+    SET airs_at = i.airs_at, airs_at_source = i.source
     FROM incoming i
     WHERE e.show_tmdb_id = ${showTmdbId} AND e.season = i.season AND e.number = i.number
   `
