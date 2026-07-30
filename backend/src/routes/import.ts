@@ -1,9 +1,14 @@
 import type { FastifyInstance } from 'fastify'
 import { z } from 'zod'
 import { prisma } from '../lib/prisma.js'
-import { applyMovieMatch, runTvTimeImport } from '../lib/import.js'
+import { applyMovieMatch, runRewatchImport, runTvTimeImport } from '../lib/import.js'
+import { parseRewatchExport } from '../lib/rewatch-export.js'
 
 const idParam = z.object({ id: z.coerce.number().int().positive() })
+
+// Both file imports write the same tables, so they share the "one at a time" lock
+// and the job the import screen re-adopts on mount.
+const FILE_SOURCES = ['TVTIME', 'REWATCH']
 
 export default async function importRoutes(app: FastifyInstance) {
   // Uploads the TV Time GDPR export. The import runs in the background
@@ -24,11 +29,35 @@ export default async function importRoutes(app: FastifyInstance) {
     return reply.code(202).send({ jobId: job.id })
   })
 
+  // Restores a Rewatch export (the JSON from GET /api/account/export).
+  // Unlike the TV Time zip this is validated synchronously: the file is small and
+  // a bad upload should fail at the button, not as a job that dies a second later.
+  app.post('/api/import/rewatch', { preHandler: app.requireAuth }, async (request, reply) => {
+    const userId = request.user!.id
+
+    const running = await prisma.importJob.findFirst({ where: { userId, status: 'RUNNING' } })
+    if (running) return reply.code(409).send({ error: 'import_already_running', jobId: running.id })
+
+    const file = await request.file()
+    if (!file) return reply.code(400).send({ error: 'missing_file' })
+    const buffer = await file.toBuffer()
+
+    try {
+      parseRewatchExport(buffer)
+    } catch (err) {
+      return reply.code(400).send({ error: err instanceof Error ? err.message : 'malformed_export' })
+    }
+
+    const job = await prisma.importJob.create({ data: { userId, source: 'REWATCH' } })
+    void runRewatchImport(job.id, userId, buffer)
+    return reply.code(202).send({ jobId: job.id })
+  })
+
   // The import screen re-adopts an in-flight (or freshly failed) job after
   // a navigation away: component state alone would lose it.
   app.get('/api/import/jobs/latest', { preHandler: app.requireAuth }, async (request) => {
     const job = await prisma.importJob.findFirst({
-      where: { userId: request.user!.id, source: 'TVTIME' },
+      where: { userId: request.user!.id, source: { in: FILE_SOURCES } },
       orderBy: { id: 'desc' },
     })
     return { job }

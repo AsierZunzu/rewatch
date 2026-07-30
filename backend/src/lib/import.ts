@@ -1,17 +1,20 @@
-// Runs a TV Time import: TMDB mapping + DB writes.
+// Runs an import (TV Time zip, or Rewatch's own JSON export): TMDB mapping + DB writes.
 // Idempotent: replayable without duplicates (unique constraints + upserts).
 import { prisma } from './prisma.js'
 import * as tmdb from './tmdb.js'
 import { cacheMovie, cacheShow } from './catalog.js'
 import { parseTvTimeExport } from './tvtime.js'
+import { parseRewatchExport } from './rewatch-export.js'
 import { FollowState, Prisma } from '../generated/prisma/client.js'
 
 export type ImportReport = {
-  shows: { mapped: number; unmapped: { tvdbId: number; name: string }[] }
+  // tvdbId is null for sources that are already TMDB-keyed (Rewatch export).
+  shows: { mapped: number; unmapped: { tvdbId: number | null; tmdbId?: number; name: string }[] }
   episodes: { imported: number; unmatched: number }
   follows: number
   ratings: number
-  movies: { autoMatched: number; pending: number; watchlist: number }
+  // `failed` only occurs on a Rewatch import: a TMDB id in the file that TMDB no longer serves.
+  movies: { autoMatched: number; pending: number; watchlist: number; failed?: number }
 }
 
 async function setProgress(jobId: number, phase: string, done: number, total: number) {
@@ -203,6 +206,167 @@ async function doImport(jobId: number, userId: number, zipBuffer: Buffer): Promi
     ratings,
     movies: { autoMatched, pending, watchlist },
   }
+}
+
+// ————————————————————————————————————————————————————————————————
+// Rewatch's own export (JSON from GET /api/account/export)
+// ————————————————————————————————————————————————————————————————
+
+export async function runRewatchImport(jobId: number, userId: number, buffer: Buffer): Promise<void> {
+  try {
+    const report = await doRewatchImport(jobId, userId, buffer)
+    await prisma.importJob.update({
+      where: { id: jobId },
+      data: { status: 'DONE', report: report as unknown as Prisma.InputJsonValue, progress: Prisma.DbNull },
+    })
+  } catch (err) {
+    await prisma.importJob.update({
+      where: { id: jobId },
+      data: { status: 'FAILED', error: err instanceof Error ? err.message : String(err) },
+    })
+  }
+}
+
+// Conflict policy (decided with the export's "restore my backup" use case in mind):
+//   · shows, follow states, ratings, favorites → the FILE WINS, overwriting local values.
+//   · watch history & watchlist               → UNION, never deleted; history can only grow.
+// Rows absent from the file are left alone: this is a restore/merge, not a mirror,
+// so importing an old backup never silently drops shows you added since.
+async function doRewatchImport(jobId: number, userId: number, buffer: Buffer): Promise<ImportReport> {
+  const data = parseRewatchExport(buffer)
+
+  // ——— 1. Cache every referenced show (ids are already TMDB) ———
+  const showIds = [...new Set([...data.shows.map((s) => s.tmdbId), ...data.episodeWatches.map((e) => e.showTmdbId)])]
+  const nameOf = new Map<number, string>()
+  for (const s of data.shows) nameOf.set(s.tmdbId, s.name)
+  for (const e of data.episodeWatches) if (!nameOf.has(e.showTmdbId)) nameOf.set(e.showTmdbId, e.showName)
+
+  const known = new Set(
+    (await prisma.show.findMany({ where: { tmdbId: { in: showIds } }, select: { tmdbId: true } })).map((s) => s.tmdbId),
+  )
+  const unmapped: ImportReport['shows']['unmapped'] = []
+  const mapped = new Set<number>()
+  let done = 0
+  await setProgress(jobId, 'shows', 0, showIds.length)
+  for (const tmdbId of showIds) {
+    if (known.has(tmdbId)) {
+      mapped.add(tmdbId)
+    } else {
+      // Only reason this fails: the show was deleted/merged on TMDB since the export.
+      try {
+        await cacheShow(tmdbId)
+        mapped.add(tmdbId)
+      } catch {
+        unmapped.push({ tvdbId: null, tmdbId, name: nameOf.get(tmdbId) ?? '?' })
+      }
+    }
+    done++
+    if (done % 5 === 0 || done === showIds.length) await setProgress(jobId, 'shows', done, showIds.length)
+  }
+
+  // ——— 2. Episode watch events ———
+  await setProgress(jobId, 'episodes', 0, data.episodeWatches.length)
+  const episodes = await prisma.episode.findMany({
+    where: { showTmdbId: { in: [...mapped] } },
+    select: { id: true, showTmdbId: true, season: true, number: true },
+  })
+  const epIndex = new Map<string, number>()
+  for (const ep of episodes) epIndex.set(`${ep.showTmdbId}:${ep.season}:${ep.number}`, ep.id)
+
+  let unmatchedEpisodes = 0
+  const events: { userId: number; episodeId: number; watchedAt: Date }[] = []
+  for (const ev of data.episodeWatches) {
+    const episodeId = epIndex.get(`${ev.showTmdbId}:${ev.season}:${ev.number}`)
+    if (!episodeId) {
+      unmatchedEpisodes++
+      continue
+    }
+    events.push({ userId, episodeId, watchedAt: ev.watchedAt })
+  }
+  const inserted = await prisma.watchEvent.createMany({ data: events, skipDuplicates: true })
+  await setProgress(jobId, 'episodes', data.episodeWatches.length, data.episodeWatches.length)
+
+  // ——— 3. Follows, favorites, ratings — file wins ———
+  let follows = 0
+  let ratings = 0
+  for (const s of data.shows) {
+    if (!mapped.has(s.tmdbId)) continue
+    await prisma.follow.upsert({
+      where: { userId_showTmdbId: { userId, showTmdbId: s.tmdbId } },
+      create: { userId, showTmdbId: s.tmdbId, state: s.state as FollowState, followedAt: s.followedAt },
+      update: { state: s.state as FollowState, followedAt: s.followedAt },
+    })
+    follows++
+    await setFavorite(userId, 'SHOW', s.tmdbId, s.isFavorite)
+    if (await setRating(userId, 'SHOW', s.tmdbId, s.rating)) ratings++
+  }
+
+  // ——— 4. Movies: watches, favorites, ratings, watchlist ———
+  const total = data.movies.length + data.movieWatchlist.length
+  await setProgress(jobId, 'movies', 0, total)
+  let autoMatched = 0
+  let watchlist = 0
+  let failedMovies = 0
+  let doneMovies = 0
+  for (const m of data.movies) {
+    try {
+      await applyMovieMatch(userId, m.tmdbId, 'WATCHED', m.watchedAts)
+      await setFavorite(userId, 'MOVIE', m.tmdbId, m.isFavorite)
+      if (await setRating(userId, 'MOVIE', m.tmdbId, m.rating)) ratings++
+      autoMatched++
+    } catch {
+      failedMovies++
+    }
+    doneMovies++
+    if (doneMovies % 5 === 0) await setProgress(jobId, 'movies', doneMovies, total)
+  }
+  for (const w of data.movieWatchlist) {
+    try {
+      await applyMovieMatch(userId, w.tmdbId, 'WATCHLIST', [])
+      watchlist++
+    } catch {
+      failedMovies++
+    }
+    doneMovies++
+    if (doneMovies % 5 === 0 || doneMovies === total) await setProgress(jobId, 'movies', doneMovies, total)
+  }
+
+  return {
+    shows: { mapped: mapped.size, unmapped },
+    episodes: { imported: inserted.count, unmatched: unmatchedEpisodes },
+    follows,
+    ratings,
+    // Nothing is ever ambiguous here: a TMDB id matches exactly, or the title is gone
+    // from TMDB — so there is never anything to resolve by hand.
+    movies: { autoMatched, pending: 0, watchlist, failed: failedMovies },
+  }
+}
+
+/** File-wins favorite: sets or clears, so un-favoriting is restored too. */
+async function setFavorite(userId: number, target: 'SHOW' | 'MOVIE', targetRef: number, isFavorite: boolean) {
+  if (isFavorite) {
+    await prisma.favorite.upsert({
+      where: { userId_target_targetRef: { userId, target, targetRef } },
+      create: { userId, target, targetRef },
+      update: {},
+    })
+  } else {
+    await prisma.favorite.deleteMany({ where: { userId, target, targetRef } })
+  }
+}
+
+/** File-wins rating. A null in the file clears a local rating. Returns true if one was set. */
+async function setRating(userId: number, target: 'SHOW' | 'MOVIE', targetRef: number, value: number | null) {
+  if (value === null) {
+    await prisma.rating.deleteMany({ where: { userId, target, targetRef } })
+    return false
+  }
+  await prisma.rating.upsert({
+    where: { userId_target_targetRef: { userId, target, targetRef } },
+    create: { userId, target, targetRef, value },
+    update: { value },
+  })
+  return true
 }
 
 /** Applies a movie match (auto or manual resolution): cache + events/watchlist. */
