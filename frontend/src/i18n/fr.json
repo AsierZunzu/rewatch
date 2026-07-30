@@ -44,6 +44,23 @@
     "onlyDaysWithReleases": "Seuls les jours avec une sortie apparaissent",
     "noUpcoming": "Aucune sortie à venir pour vos séries"
   },
+  "calendarFeed": {
+    "title": "Flux calendrier",
+    "intro": "Un lien en lecture seule vers les épisodes à venir des séries que vous suivez, au format iCalendar standard. Abonnez-y une appli agenda, ou pointez Home Assistant dessus. Il couvre les deux dernières semaines et les trois prochains mois, et se met à jour tout seul.",
+    "urlTitle": "Votre lien de flux",
+    "copy": "Copier le lien",
+    "copied": "Copié",
+    "secretHint": "Gardez ce lien privé : quiconque le possède voit les séries que vous suivez, sans avoir à se connecter.",
+    "rotateTitle": "Remplacer le lien",
+    "rotateText": "Génère un nouveau lien et annule l'actuel. Ce qui y est déjà abonné cesse de se mettre à jour tant que vous ne donnez pas la nouvelle adresse.",
+    "rotate": "Remplacer le lien",
+    "rotateConfirm": "Oui, le remplacer",
+    "cancel": "Annuler",
+    "disable": "Désactiver le flux",
+    "offTitle": "Le flux est désactivé",
+    "offText": "Activez-le pour obtenir un lien privé auquel vous abonner. Vous pourrez le remplacer ou le supprimer à tout moment.",
+    "enable": "Activer le flux"
+  },
   "search": {
     "title": "Recherche",
     "placeholder": "Séries, films…",
@@ -207,7 +224,9 @@
     "theme": "Thème",
     "theme_dark": "Sombre",
     "theme_light": "Clair",
-    "theme_system": "Auto"
+    "theme_system": "Auto",
+    "calendarFeedRow": "Flux calendrier",
+    "calendarFeedRowHint": "Suivre les prochains épisodes depuis une appli agenda"
   },
   "resolve": {
     "title": "À résoudre",
