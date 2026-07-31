@@ -3,10 +3,26 @@ import { useTranslation } from 'react-i18next'
 import { useQuery, useQueryClient } from '@tanstack/react-query'
 import { api } from '../api/client'
 import { ScreenTitle, Spinner } from '../components/ui'
+import { detectPlatform } from '../lib/install'
 
 type FeedToken = { token: string | null }
 
 const feedUrl = (token: string) => `${window.location.origin}/api/calendar/${token}.ics`
+
+/**
+ * Same URL under the webcal scheme. It is not a protocol of its own: it tells
+ * the client to *subscribe* to the .ics rather than download it once, and is
+ * fetched over https all the same. Apple Calendar and Outlook register it;
+ * Android has no default handler, which is why Google gets its own link.
+ */
+const webcalUrl = (token: string) => feedUrl(token).replace(/^https?:/, 'webcal:')
+
+/** Undocumented but long-standing: opens Google Calendar's "from URL" flow
+ *  already filled in. The copy button stays as the path that cannot break. */
+const googleUrl = (token: string) => `https://calendar.google.com/calendar/r?cid=${webcalUrl(token)}`
+
+const outlookUrl = (token: string) =>
+  `https://outlook.office.com/calendar/0/addfromweb?url=${webcalUrl(token)}`
 
 export default function CalendarFeed() {
   const { t } = useTranslation()
@@ -40,6 +56,18 @@ export default function CalendarFeed() {
 
   if (isPending) return <Spinner />
 
+  // Android registers no webcal handler, so Google Calendar leads there and the
+  // webcal link stays available for the apps that do (ICSx⁵ and friends).
+  const subscribeTargets = (token: string) => {
+    const device = { href: webcalUrl(token), label: t('calendarFeed.targetDevice') }
+    const google = { href: googleUrl(token), label: 'Google Calendar' }
+    const outlook = { href: outlookUrl(token), label: 'Outlook' }
+    return detectPlatform() === 'android'
+      ? { primary: google, others: [device, outlook] }
+      : { primary: device, others: [google, outlook] }
+  }
+  const subscribe = data?.token ? subscribeTargets(data.token) : null
+
   return (
     <div className="flex min-h-full flex-col">
       <ScreenTitle title={t('calendarFeed.title')} />
@@ -48,8 +76,26 @@ export default function CalendarFeed() {
           <div className="text-muted text-[13px] leading-normal">{t('calendarFeed.intro')}</div>
         </div>
 
-        {data?.token ? (
+        {data?.token && subscribe ? (
           <>
+            <div className="bg-card rounded-[18px] border border-line p-4">
+              <div className="text-[13px] font-extrabold">{t('calendarFeed.subscribeTitle')}</div>
+              <div className="text-muted mt-1 text-[12.5px] leading-normal">{t('calendarFeed.subscribeText')}</div>
+              <a
+                href={subscribe.primary.href}
+                className="bg-accent text-ink mt-2.5 block w-full rounded-[12px] py-2.5 text-center text-[13px] font-extrabold"
+              >
+                {t('calendarFeed.subscribe')}
+              </a>
+              <div className="mt-2.5 flex flex-wrap justify-center gap-x-4 gap-y-1">
+                {subscribe.others.map((o) => (
+                  <a key={o.label} href={o.href} className="text-muted text-[12px] font-bold">
+                    {o.label}
+                  </a>
+                ))}
+              </div>
+            </div>
+
             <div className="bg-card rounded-[18px] border border-line p-4">
               <div className="text-[13px] font-extrabold">{t('calendarFeed.urlTitle')}</div>
               <div className="bg-track text-muted mt-2 rounded-[12px] p-2.5 text-[11.5px] break-all">

@@ -49,6 +49,10 @@
   "calendarFeed": {
     "title": "Calendar feed",
     "intro": "A read-only link to the episodes coming up for the shows you follow, in the standard iCalendar format. Subscribe to it from a calendar app, or point Home Assistant at it. It covers the last two weeks and the next three months, and refreshes on its own.",
+    "subscribeTitle": "Add to your calendar",
+    "subscribeText": "Your calendar subscribes to the feed and keeps itself up to date. Google Calendar can take up to 24 hours to show new episodes.",
+    "subscribe": "Add to my calendar",
+    "targetDevice": "Apple Calendar",
     "urlTitle": "Your feed URL",
     "copy": "Copy the link",
     "copied": "Copied",
