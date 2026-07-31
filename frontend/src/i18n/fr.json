@@ -49,6 +49,10 @@
   "calendarFeed": {
     "title": "Flux calendrier",
     "intro": "Un lien en lecture seule vers les épisodes à venir des séries que vous suivez, au format iCalendar standard. Abonnez-y une appli agenda, ou pointez Home Assistant dessus. Il couvre les deux dernières semaines et les trois prochains mois, et se met à jour tout seul.",
+    "subscribeTitle": "Ajouter à votre agenda",
+    "subscribeText": "Votre agenda s'abonne au flux et se met à jour tout seul. Google Agenda peut mettre jusqu'à 24 h à afficher les nouveaux épisodes.",
+    "subscribe": "Ajouter à mon agenda",
+    "targetDevice": "Apple Calendar",
     "urlTitle": "Votre lien de flux",
     "copy": "Copier le lien",
     "copied": "Copié",

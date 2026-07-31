@@ -21,7 +21,6 @@
     "showsInProgress": "{{count}} angefangene Serie",
     "showsInProgress_other": "{{count}} angefangene Serien",
     "justChecked": "Gesehen! {{code}} wird geladen…",
-    "remainingInSeason": "Noch {{count}} Folge · Staffel {{season}}",
     "remainingInSeason_other": "Noch {{count}} Folgen · Staffel {{season}}",
     "behind": "{{count}} Folgen im Rückstand",
     "lastOfSeason": "Letzte Folge der Staffel",
@@ -50,6 +49,10 @@
   "calendarFeed": {
     "title": "Kalender-Feed",
     "intro": "Ein schreibgeschützter Link zu den anstehenden Folgen der Serien, denen du folgst, im Standardformat iCalendar. Abonniere ihn in einer Kalender-App oder richte Home Assistant darauf aus. Er umfasst die letzten zwei Wochen und die nächsten drei Monate und aktualisiert sich von selbst.",
+    "subscribeTitle": "Zum Kalender hinzufügen",
+    "subscribeText": "Dein Kalender abonniert den Feed und hält sich selbst aktuell. Google Kalender kann bis zu 24 Stunden brauchen, bis neue Folgen erscheinen.",
+    "subscribe": "Zu meinem Kalender hinzufügen",
+    "targetDevice": "Apple Kalender",
     "urlTitle": "Deine Feed-URL",
     "copy": "Link kopieren",
     "copied": "Kopiert",
