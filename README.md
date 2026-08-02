@@ -146,7 +146,7 @@ Environment-only — these are read at boot and have no console equivalent.
 | Variable | Default | Description |
 | --- | --- | --- |
 | `DATABASE_URL` | — | **Required.** PostgreSQL connection string |
-| `PORT` | `3010` | The Docker image sets `3020` |
+| `PORT` | `3020` | |
 | `HOST` | `127.0.0.1` | Loopback by default, assuming a reverse proxy. The Docker image sets `0.0.0.0` |
 | `NODE_ENV` | — | Set to `production` outside development; session cookies are only marked `Secure` when it is |
 | `TRUST_PROXY` | `true` | Set to `false` only when the node port is exposed directly, otherwise clients can spoof `X-Forwarded-For` to dodge rate limits |
