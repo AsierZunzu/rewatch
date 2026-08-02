@@ -109,7 +109,63 @@ Serve `frontend/dist` as static files and proxy `/api/` to the backend port (ngi
 
 ### Configuration
 
-Everything except `DATABASE_URL` is configurable from the admin console (`/admin`, Settings panel): TMDB key and cache language, public URL, SMTP, Web Push keys, open/closed signups, and an optional privacy/legal page if your instance hosts other people. Environment variables with the same names ([`backend/.env.example`](backend/.env.example)) always take precedence when set, so config-as-code deployments work too — the console shows those values as locked.
+Everything except `DATABASE_URL` is configurable from the admin console (`/admin`, Settings panel): TMDB key and cache language, public URL, SMTP, Web Push keys, open/closed signups, and an optional privacy/legal page if your instance hosts other people. **Nothing below is required to get started** — the setup wizard writes these to the database for you.
+
+Environment variables are for config-as-code deployments. Setting one takes precedence over the stored value permanently, and the console shows that field as locked; unset it to hand control back to the UI. A copy-paste starting point lives in [`backend/.env.example`](backend/.env.example).
+
+#### Instance settings
+
+Stored in the database and editable at `/admin`, or pinned here.
+
+| Variable | Default | Description |
+| --- | --- | --- |
+| `TMDB_API_TOKEN` | — | TMDB v4 Read Access Token. Required before the app is usable; its absence is what triggers the setup wizard |
+| `TMDB_LANGUAGE` | `en-US` | Language of the shared metadata cache. `en-US` or `fr-FR`. Per-user translations are fetched regardless |
+| `APP_URL` | `http://localhost:5173` | Public URL of the instance, used to build links in emails. No trailing slash |
+| `REGISTRATION_ENABLED` | `true` | Set to `false` to close self-service signups. Existing accounts keep working |
+| `SMTP_HOST` | — | Leave empty to disable email entirely: verification and reset links are written to the log instead |
+| `SMTP_PORT` | `587` | |
+| `SMTP_SECURE` | `false` | `true` for implicit TLS (usually port 465) |
+| `SMTP_USER` | — | Leave empty for an unauthenticated relay |
+| `SMTP_PASS` | — | |
+| `MAIL_FROM` | `Rewatch <no-reply@rewatch.local>` | Envelope sender |
+| `VAPID_PUBLIC_KEY` | — | Web Push keys. Generate with `npx web-push generate-vapid-keys`, or in one click from the console |
+| `VAPID_PRIVATE_KEY` | — | |
+| `VAPID_SUBJECT` | `mailto:admin@localhost` | Contact address for push providers. Must start with `mailto:` |
+| `TRAKT_CLIENT_ID` | — | Trakt.tv OAuth app, from Settings → Your API Apps. Both halves are needed before sync appears |
+| `TRAKT_CLIENT_SECRET` | — | |
+| `LEGAL_HOST` | — | Who operates this instance. Shown on the public legal page |
+| `LEGAL_CONTACT` | — | How to reach the operator. Worth filling in only if other people have accounts here |
+
+Rotating `VAPID_*` keys strands every existing push subscription, which is why the console refuses to overwrite them once set.
+
+#### Infrastructure
+
+Environment-only — these are read at boot and have no console equivalent.
+
+| Variable | Default | Description |
+| --- | --- | --- |
+| `DATABASE_URL` | — | **Required.** PostgreSQL connection string |
+| `PORT` | `3010` | The Docker image sets `3020` |
+| `HOST` | `127.0.0.1` | Loopback by default, assuming a reverse proxy. The Docker image sets `0.0.0.0` |
+| `NODE_ENV` | — | Set to `production` outside development; session cookies are only marked `Secure` when it is |
+| `TRUST_PROXY` | `true` | Set to `false` only when the node port is exposed directly, otherwise clients can spoof `X-Forwarded-For` to dodge rate limits |
+| `STATIC_DIR` | — | Serve a built frontend from the API process instead of nginx/Caddy, e.g. `../frontend/dist` |
+| `TRAKT_API_URL` | `https://api.trakt.tv` | Override the Trakt endpoint. Intended for testing |
+
+#### Unattended admin provisioning
+
+Optional, and a no-op unless `ADMIN_USERNAME` is set — see [Admin](#admin) below for the full semantics.
+
+| Variable | Default | Description |
+| --- | --- | --- |
+| `ADMIN_USERNAME` | — | Provisions the operator account at boot. Unset, the first account to register becomes the administrator instead |
+| `ADMIN_EMAIL` | — | Required when creating a new account |
+| `ADMIN_PASSWORD` | — | Required when creating a new account. At least 8 characters |
+| `ADMIN_LANGUAGE` | `en` | `en` or `fr` |
+| `ADMIN_TIMEZONE` | `UTC` | IANA zone, e.g. `Europe/Madrid` |
+
+`ADMIN_EMAIL` and `ADMIN_PASSWORD` each accept an `_FILE` variant naming a file that holds the value (`ADMIN_PASSWORD_FILE=/run/secrets/…`), so the password need not sit in the compose file or in `docker inspect` output.
 
 ### Admin
 
