@@ -81,6 +81,10 @@ jobs:
         if: steps.compare.outputs.behind != '0'
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          # We are a fork, so `gh` would otherwise resolve the base repo to the
+          # parent (gulian/rewatch) and look for -- or try to open -- the PR
+          # there. GITHUB_TOKEN has no write access upstream; pin it to us.
+          GH_REPO: ${{ github.repository }}
         run: |
           number=$(gh pr list --head "$SYNC_BRANCH" --base "$TARGET_BRANCH" \
             --state open --json number --jq '.[0].number')
@@ -106,6 +110,7 @@ jobs:
         if: steps.existing.outputs.proceed == 'true'
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          GH_REPO: ${{ github.repository }}  # see note in "Look for an open sync PR"
           EXISTING: ${{ steps.existing.outputs.number }}
           BEHIND: ${{ steps.compare.outputs.behind }}
           AHEAD: ${{ steps.compare.outputs.ahead }}
