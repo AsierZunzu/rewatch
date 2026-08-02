@@ -119,6 +119,16 @@ The first account created on a fresh instance is the administrator. Additional a
 UPDATE users SET is_admin = true WHERE username = 'them';
 ```
 
+For unattended deployments the operator account can instead come from the environment, so nothing has to be done through the UI:
+
+```yaml
+ADMIN_USERNAME: admin
+ADMIN_EMAIL: admin@example.com
+ADMIN_PASSWORD: a-long-random-one   # or ADMIN_PASSWORD_FILE for docker secrets
+```
+
+It's created at boot and pre-verified, so an instance without SMTP can't lock its own operator out when the verification grace period ends. Creating it also closes the "first account wins" window: everyone who signs up afterwards is an ordinary user. On later boots the account is left alone — admin is re-granted and the email realigned on `ADMIN_EMAIL`, but the password is never rewritten, so one changed in the app survives restarts. If `ADMIN_USERNAME` names an account that already exists, that account is promoted rather than duplicated.
+
 The console lives at `/admin`: instance stats, live latency, settings, account management.
 
 ## Importing from TV Time
