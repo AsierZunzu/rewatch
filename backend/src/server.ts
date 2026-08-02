@@ -3,10 +3,15 @@ import { buildApp } from './app.js'
 import { prisma } from './lib/prisma.js'
 import { loadSettings } from './lib/settings.js'
 import { startDailySchedule } from './lib/scheduler.js'
+import { bootstrapAdminFromEnv } from './lib/admin-bootstrap.js'
 
 await loadSettings()
 const app = await buildApp()
 startDailySchedule(app)
+
+// Opt-in, no-op unless ADMIN_USERNAME is set. Runs before the port opens so a
+// declaratively provisioned instance never serves a request without its admin.
+await bootstrapAdminFromEnv(app.log)
 
 // Import jobs run in-process; any job still RUNNING at boot was killed by a
 // restart or crash. Fail it so the user can retry (imports are idempotent) —
