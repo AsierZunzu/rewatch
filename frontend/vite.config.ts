@@ -35,7 +35,7 @@ export default defineConfig({
   server: {
     proxy: {
       // Dev: Vite proxies the local Fastify API.
-      '/api': 'http://127.0.0.1:3010',
+      '/api': 'http://127.0.0.1:3020',
     },
   },
 })

@@ -17,7 +17,9 @@ const swept = await prisma.importJob.updateMany({
 })
 if (swept.count > 0) app.log.warn({ count: swept.count }, 'swept interrupted import jobs')
 
-const port = Number(process.env.PORT ?? 3010)
+// 3020 everywhere: the Dockerfile, the compose port mapping and the Vite dev
+// proxy all assume it, so the fallback matches rather than contradicts them.
+const port = Number(process.env.PORT ?? 3020)
 // Defaults to loopback: a reverse proxy is expected in front. Set HOST=0.0.0.0 in containers.
 const host = process.env.HOST ?? '127.0.0.1'
 
