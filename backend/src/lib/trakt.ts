@@ -3,6 +3,7 @@
 // admin settings); each user then connects their own account.
 import { prisma } from './prisma.js'
 import { getSetting } from './settings.js'
+import type { ShowAirTimes } from './airing.js'
 
 // Overridable for the e2e stub server — leave unset in production.
 const BASE = process.env.TRAKT_API_URL || 'https://api.trakt.tv'
@@ -195,13 +196,6 @@ type TraktAirs = { day?: string | null; time?: string | null; timezone?: string 
 type TraktSeasonWithEpisodes = {
   number: number
   episodes?: { season: number; number: number; first_aired?: string | null }[]
-}
-
-export type ShowAirTimes = {
-  /** The show's weekly slot, local to `timezone`. Null when Trakt has none. */
-  airs: { time: string; timezone: string } | null
-  /** "season:number" → exact UTC instant. Episodes Trakt cannot date are absent. */
-  firstAired: Map<string, Date>
 }
 
 /**

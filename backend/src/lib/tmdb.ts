@@ -122,6 +122,13 @@ export const searchTv = (query: string) =>
     include_adult: 'false',
   })
 
+/**
+ * The show's IDs in the other databases. TVmaze can only be looked up by TheTVDB
+ * or IMDb id — it does not index TMDB — so this is the bridge between them.
+ */
+export const getShowExternalIds = (tmdbId: number) =>
+  tmdb<{ imdb_id: string | null; tvdb_id: number | null }>(`/tv/${tmdbId}/external_ids`)
+
 /** Resolves a TheTVDB ID (TV Time export) to its TMDB entry. Null if unknown. */
 export async function findShowByTvdbId(tvdbId: number): Promise<{ id: number; name: string } | null> {
   const res = await tmdb<{ tv_results: { id: number; name: string }[] }>(`/find/${tvdbId}`, {
