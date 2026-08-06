@@ -38,6 +38,16 @@ services:
         condition: service_healthy
     environment:
       DATABASE_URL: postgresql://rewatch:${POSTGRES_PASSWORD:-rewatch}@db:5432/rewatch
+      # Unattended setup (optional) — skip the signup page and the wizard by
+      # declaring the operator account and the instance settings here. Any key
+      # from backend/.env.example works; values set this way take precedence
+      # over the admin console, which shows them as locked.
+      #
+      # ADMIN_USERNAME: admin
+      # ADMIN_EMAIL: admin@example.com
+      # ADMIN_PASSWORD: ${ADMIN_PASSWORD:?set it in .env, not here}
+      # TMDB_API_TOKEN: ${TMDB_API_TOKEN}
+      # APP_URL: https://rewatch.example.com
     ports:
       - '3020:3020'
 

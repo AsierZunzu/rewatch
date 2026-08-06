@@ -7,21 +7,13 @@ import { createAuthToken, consumeAuthToken } from '../lib/auth-tokens.js'
 import { sendResetEmail, sendVerificationEmail, type Lang } from '../lib/mailer.js'
 import { isBlocked, verifyDeadline } from '../lib/verification.js'
 import { getSetting } from '../lib/settings.js'
-
-const usernameSchema = z
-  .string()
-  .min(3)
-  .max(30)
-  .regex(/^[a-zA-Z0-9_.-]+$/, 'letters, digits, _ . - only')
-const passwordSchema = z.string().min(8).max(128)
-const emailSchema = z.email().max(254).transform((e) => e.toLowerCase())
-const languageSchema = z.enum(['fr', 'en'])
-// Validated against the runtime's own IANA database rather than a hand-kept
-// list: the value reaches Postgres' AT TIME ZONE, so it must be a real zone.
-const timezoneSchema = z
-  .string()
-  .max(64)
-  .refine((tz) => Intl.supportedValuesOf('timeZone').includes(tz), 'unknown timezone')
+import {
+  emailSchema,
+  languageSchema,
+  passwordSchema,
+  timezoneSchema,
+  usernameSchema,
+} from '../lib/validation.js'
 
 // Strict limit on bruteforce/mail-spam sensitive routes (per IP).
 const strictRateLimit = {
