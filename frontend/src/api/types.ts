@@ -36,6 +36,12 @@ export type Episode = {
   airDate: string | null
   /** Absolute instant it aired. Use `hasAired()`, never `airDate`, to test this. */
   airsAt: string | null
+  /**
+   * How `airsAt` was obtained. Only TRAKT, TVMAZE and SCHEDULE carry a real
+   * broadcast time; FALLBACK is end-of-`airDate` in the origin country, so it
+   * must never be shown as a clock time. See `knownAirInstant()`.
+   */
+  airsAtSource: 'TRAKT' | 'TVMAZE' | 'SCHEDULE' | 'FALLBACK' | null
   runtime: number | null
 }
 
@@ -60,7 +66,7 @@ export type Follow = {
 
 export type WatchlistShow = {
   show: Show
-  nextEpisode: { id: number; season: number; number: number; name: string | null; airDate: string | null }
+  nextEpisode: Pick<Episode, 'id' | 'season' | 'number' | 'name' | 'airDate' | 'airsAt' | 'airsAtSource'>
   seasonRemaining: number
   totalRemaining: number
   seasonRemainingMinutes: number
