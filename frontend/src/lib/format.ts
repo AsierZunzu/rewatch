@@ -43,6 +43,40 @@ export const runtimeLabel = (min: number | null) => {
 export const frDate = (d: string | Date, opts: Intl.DateTimeFormatOptions = { day: 'numeric', month: 'short', year: 'numeric' }) =>
   new Intl.DateTimeFormat(locale(), opts).format(new Date(d))
 
+/**
+ * Clock time of an absolute instant, in the viewer's own zone — the only zone
+ * they can plan around. `hour12` is left to the locale.
+ *
+ * Only ever call this on `knownAirInstant()`, never on a raw `airsAt`.
+ */
+export const clockTime = (d: Date) =>
+  new Intl.DateTimeFormat(locale(), { hour: '2-digit', minute: '2-digit' }).format(d)
+
+/**
+ * "21:00" hung on the day it belongs to: "Today · 21:00", "Fri · 21:00",
+ * "12 Jul · 21:00". A bare clock is only unambiguous on the calendar, where the
+ * day is already the heading; everywhere else the day has to travel with it.
+ *
+ * The day is the one the *instant* falls on for the viewer, never `airDate` —
+ * see `knownAirInstant()`.
+ */
+export function airTimeLabel(at: Date) {
+  const today = new Date()
+  today.setHours(0, 0, 0, 0)
+  const target = new Date(at)
+  target.setHours(0, 0, 0, 0)
+  const diff = Math.round((target.getTime() - today.getTime()) / 86_400_000)
+  const time = clockTime(at)
+  if (diff === 0) return `${i18n.t('calendar.today')} · ${time}`
+  if (diff === 1) return `${i18n.t('calendar.tomorrow')} · ${time}`
+  // Inside the coming week the weekday is more legible than a date; past
+  // episodes and anything further out get the date, with the year only when it
+  // is not the current one.
+  if (diff > 1 && diff < 7) return `${frDate(at, { weekday: 'short' })} · ${time}`
+  const sameYear = at.getFullYear() === new Date().getFullYear()
+  return `${frDate(at, { day: 'numeric', month: 'short', ...(sameYear ? {} : { year: 'numeric' }) })} · ${time}`
+}
+
 /** "Today" / "Tomorrow" / "Sunday 12 July" (+ year when different) for the calendar. */
 export function calendarDayLabel(date: Date): { label: string; sub: string; today: boolean; daysUntil: number | null } {
   const today = new Date()

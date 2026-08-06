@@ -16,6 +16,8 @@ type NextEpisodeRow = {
   number: number
   episode_name: string | null
   air_date: Date | null
+  airs_at: Date | null
+  airs_at_source: string | null
   season_remaining: bigint
   total_remaining: bigint
   season_remaining_minutes: bigint | null
@@ -86,7 +88,7 @@ export default async function libraryRoutes(app: FastifyInstance) {
       )
       SELECT
         n.show_tmdb_id, n.id AS episode_id, n.season, n.number,
-        n.name AS episode_name, n.air_date,
+        n.name AS episode_name, n.air_date, n.airs_at, n.airs_at_source,
         c.season_remaining, c.total_remaining,
         c.season_remaining_minutes, c.total_remaining_minutes,
         h.more_in_season, a.last_watched_at
@@ -129,6 +131,10 @@ export default async function libraryRoutes(app: FastifyInstance) {
           number: r.number,
           name: nextEpNames.get(r.episode_id) ?? r.episode_name,
           airDate: r.air_date,
+          // Carried so the card can say when it aired; only meaningful together,
+          // the source being what tells a broadcast time from the end-of-day bound.
+          airsAt: r.airs_at,
+          airsAtSource: r.airs_at_source,
         },
         // Counts stay aired-only — they answer "how much can I watch now?".
         // Whether this is the finale is a fact about the season, not about

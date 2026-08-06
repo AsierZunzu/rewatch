@@ -7,7 +7,8 @@ import { api } from '../api/client'
 import type { WatchlistShow } from '../api/types'
 import { Poster } from '../components/Poster'
 import { CheckButton, ProgressBar, ScreenTitle } from '../components/ui'
-import { epCode, frDate, runtimeLabel } from '../lib/format'
+import { airTimeLabel, epCode, frDate, runtimeLabel } from '../lib/format'
+import { knownAirInstant } from '../lib/airing'
 import { detectPlatform, isStandalone } from '../lib/install'
 
 function UpNextCard({ item }: { item: WatchlistShow }) {
@@ -36,6 +37,9 @@ function UpNextCard({ item }: { item: WatchlistShow }) {
             tone: 'normal' as const,
           }
   const restLeft = runtimeLabel(rest.minutes)
+  // The card's episode is always one that has aired, so this reads as history —
+  // it dates the backlog ("last aired" three weeks ago is worth seeing).
+  const airedAt = knownAirInstant(item.nextEpisode)
   const progressPct =
     item.totalRemaining > 0 ? Math.max(4, 100 - (item.seasonRemaining / (item.seasonRemaining + 3)) * 100) : 100
 
@@ -60,9 +64,12 @@ function UpNextCard({ item }: { item: WatchlistShow }) {
         <Link viewTransition to={`/show/${item.show.tmdbId}`} className="truncate text-base leading-tight font-bold">
           {item.show.name}
         </Link>
-        <div className="text-muted truncate text-[13px]">
-          <span className="text-text font-bold">{epCode(item.nextEpisode.season, item.nextEpisode.number)}</span>
-          {item.nextEpisode.name ? ` · ${item.nextEpisode.name}` : ''}
+        <div className="flex items-baseline gap-2">
+          <div className="text-muted min-w-0 flex-1 truncate text-[13px]">
+            <span className="text-text font-bold">{epCode(item.nextEpisode.season, item.nextEpisode.number)}</span>
+            {item.nextEpisode.name ? ` · ${item.nextEpisode.name}` : ''}
+          </div>
+          {airedAt && <div className="text-dim flex-none text-[11px] font-semibold">{airTimeLabel(airedAt)}</div>}
         </div>
         <ProgressBar pct={progressPct} />
         <div

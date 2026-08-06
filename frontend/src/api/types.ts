@@ -66,7 +66,7 @@ export type Follow = {
 
 export type WatchlistShow = {
   show: Show
-  nextEpisode: { id: number; season: number; number: number; name: string | null; airDate: string | null }
+  nextEpisode: Pick<Episode, 'id' | 'season' | 'number' | 'name' | 'airDate' | 'airsAt' | 'airsAtSource'>
   seasonRemaining: number
   totalRemaining: number
   seasonRemainingMinutes: number

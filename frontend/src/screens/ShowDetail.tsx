@@ -7,8 +7,8 @@ import CastSection from '../components/CastSection'
 import { Poster } from '../components/Poster'
 import StateMenu from '../components/StateMenu'
 import { Spinner, Stars } from '../components/ui'
-import { frDate, initial, posterColor, tmdbImage } from '../lib/format'
-import { hasAired } from '../lib/airing'
+import { clockTime, frDate, initial, posterColor, tmdbImage } from '../lib/format'
+import { hasAired, knownAirInstant } from '../lib/airing'
 import { buzz } from '../lib/haptics'
 
 const STATES: { key: FollowState; labelKey: string }[] = [
@@ -61,6 +61,11 @@ function SeasonBlock({
           {episodes.map((e) => {
             const future = !hasAired(e)
             const seen = watched.has(e.id)
+            // Date and time have to come from the same source: a 22:00 US
+            // broadcast is the next day at 04:00 in Europe, so pairing the
+            // local clock with `airDate` would print a pair that never
+            // happened. With no known instant, the bare date stands alone.
+            const at = knownAirInstant(e)
             return (
               <div
                 key={e.id}
@@ -73,7 +78,11 @@ function SeasonBlock({
                   <div className="truncate text-[13.5px] leading-tight font-semibold">
                     {e.name ?? t('show.episodeFallback', { n: e.number })}
                   </div>
-                  {e.airDate && <div className="text-dim mt-0.5 text-[11px] font-semibold">{frDate(e.airDate)}</div>}
+                  {e.airDate && (
+                    <div className="text-dim mt-0.5 text-[11px] font-semibold">
+                      {at ? `${frDate(at)} · ${clockTime(at)}` : frDate(e.airDate)}
+                    </div>
+                  )}
                 </div>
                 {future ? (
                   <div className="text-dim border-border flex-none rounded-[7px] border-[1.5px] px-2 py-1 text-[10px] font-extrabold tracking-wider uppercase">
