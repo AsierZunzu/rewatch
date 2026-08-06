@@ -1,0 +1,155 @@
+# Weekly upstream sync: every Saturday morning this fetches gulian/rewatch and,
+# when it has commits we don't, opens (or refreshes) a PR into our master.
+#
+# It never pushes to master directly -- merging is a manual step, so the deploy
+# and docker workflows only fire once someone has looked at the diff.
+#
+# Note: GitHub disables scheduled workflows on forks by default, and re-disables
+# them after 60 days without repo activity. If the cron stops firing, re-enable
+# it from the Actions tab; `workflow_dispatch` always works.
+name: sync-upstream
+
+on:
+  schedule:
+    # 06:00 UTC Saturday -> 08:00 Madrid (CEST) / 07:00 (CET). Cron is UTC-only.
+    - cron: '0 6 * * 6'
+  workflow_dispatch:
+
+permissions:
+  contents: write
+  pull-requests: write
+
+concurrency:
+  group: sync-upstream
+  cancel-in-progress: false
+
+env:
+  UPSTREAM_REPO: gulian/rewatch
+  UPSTREAM_BRANCH: master
+  TARGET_BRANCH: master
+  SYNC_BRANCH: sync/upstream
+
+jobs:
+  sync:
+    runs-on: ubuntu-latest
+    # Guard so this is a no-op if the file ever lands upstream via a PR back.
+    if: github.repository != 'gulian/rewatch'
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+          ref: master
+
+      - name: Fetch upstream
+        run: |
+          git remote add upstream "https://github.com/${UPSTREAM_REPO}.git"
+          git fetch --no-tags upstream "$UPSTREAM_BRANCH"
+
+      - name: Compare with upstream
+        id: compare
+        run: |
+          behind=$(git rev-list --count "HEAD..upstream/${UPSTREAM_BRANCH}")
+          ahead=$(git rev-list --count "upstream/${UPSTREAM_BRANCH}..HEAD")
+          echo "behind=$behind" >> "$GITHUB_OUTPUT"
+          echo "ahead=$ahead"   >> "$GITHUB_OUTPUT"
+          echo "Fork is $behind commit(s) behind and $ahead ahead of ${UPSTREAM_REPO}@${UPSTREAM_BRANCH}."
+
+          # Shortlog of what would come in, for the PR body.
+          {
+            echo 'log<<SYNC_EOF'
+            git log --no-merges --format='- %h %s' "HEAD..upstream/${UPSTREAM_BRANCH}" | head -50
+            echo 'SYNC_EOF'
+          } >> "$GITHUB_OUTPUT"
+
+      - name: Detect merge conflicts
+        id: conflicts
+        if: steps.compare.outputs.behind != '0'
+        run: |
+          git config user.name  'github-actions[bot]'
+          git config user.email 'github-actions[bot]@users.noreply.github.com'
+          if git merge --no-commit --no-ff "upstream/${UPSTREAM_BRANCH}" >/dev/null 2>&1; then
+            echo 'conflicted=false' >> "$GITHUB_OUTPUT"
+          else
+            echo 'conflicted=true' >> "$GITHUB_OUTPUT"
+            git diff --name-only --diff-filter=U | sed 's/^/  /'
+          fi
+          git merge --abort 2>/dev/null || git reset --hard HEAD
+
+      # A sync PR from a previous Saturday may still be open and unreviewed.
+      - name: Look for an open sync PR
+        id: existing
+        if: steps.compare.outputs.behind != '0'
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          # We are a fork, so `gh` would otherwise resolve the base repo to the
+          # parent (gulian/rewatch) and look for -- or try to open -- the PR
+          # there. GITHUB_TOKEN has no write access upstream; pin it to us.
+          GH_REPO: ${{ github.repository }}
+        run: |
+          number=$(gh pr list --head "$SYNC_BRANCH" --base "$TARGET_BRANCH" \
+            --state open --json number --jq '.[0].number')
+          echo "number=${number}" >> "$GITHUB_OUTPUT"
+
+          # Stale PR policy: always refresh. There is only ever one sync PR and
+          # it always points at upstream's current tip, so what you review is
+          # never a stale snapshot. The cost is that force-pushing rewrites the
+          # branch under an in-progress review -- if you have started resolving
+          # conflicts on an open sync PR, do it on a branch of your own.
+          proceed=true
+
+          echo "proceed=${proceed}" >> "$GITHUB_OUTPUT"
+
+      - name: Push sync branch
+        if: steps.existing.outputs.proceed == 'true'
+        run: |
+          # The branch is upstream's tip verbatim; GitHub computes the merge.
+          git push --force origin \
+            "refs/remotes/upstream/${UPSTREAM_BRANCH}:refs/heads/${SYNC_BRANCH}"
+
+      - name: Open or refresh pull request
+        if: steps.existing.outputs.proceed == 'true'
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          GH_REPO: ${{ github.repository }}  # see note in "Look for an open sync PR"
+          EXISTING: ${{ steps.existing.outputs.number }}
+          BEHIND: ${{ steps.compare.outputs.behind }}
+          AHEAD: ${{ steps.compare.outputs.ahead }}
+          LOG: ${{ steps.compare.outputs.log }}
+          CONFLICTED: ${{ steps.conflicts.outputs.conflicted }}
+        run: |
+          title="Sync with ${UPSTREAM_REPO} (${BEHIND} new commit(s))"
+
+          if [ "$CONFLICTED" = 'true' ]; then
+            warning=$'\n> [!WARNING]\n> This merges with conflicts -- resolve them locally before merging.\n'
+          else
+            warning=''
+          fi
+
+          body=$(cat <<EOF
+          Automated weekly sync of \`${UPSTREAM_BRANCH}\` from [\`${UPSTREAM_REPO}\`](https://github.com/${UPSTREAM_REPO}).
+
+          Our \`${TARGET_BRANCH}\` is **${BEHIND} behind** and **${AHEAD} ahead** of upstream.
+          ${warning}
+          ### Incoming commits
+
+          ${LOG}
+
+          [Upstream commit history](https://github.com/${UPSTREAM_REPO}/commits/${UPSTREAM_BRANCH})
+
+          ---
+          Opened by \`.github/workflows/sync-upstream.yml\`.
+          EOF
+          )
+
+          if [ -n "$EXISTING" ]; then
+            # The force-push above already moved the branch; just restate the diff.
+            gh pr edit "$EXISTING" --title "$title" --body "$body"
+            echo "Refreshed existing PR #${EXISTING}."
+          else
+            gh pr create --head "$SYNC_BRANCH" --base "$TARGET_BRANCH" \
+              --title "$title" --body "$body"
+          fi
+
+      - name: Nothing to sync
+        if: steps.compare.outputs.behind == '0'
+        run: echo "Already up to date with ${UPSTREAM_REPO}@${UPSTREAM_BRANCH}."
