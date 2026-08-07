@@ -190,7 +190,11 @@
     "notifications": "Benachrichtigungen zu neuen Folgen",
     "notificationsHint": "Ein Push, sobald eine Folge ausgestrahlt wurde",
     "notificationsUnsupported": "hier nicht unterstützt*",
-    "notificationsDenied": "Benachrichtigungen vom Browser blockiert. Prüfe die Website-Berechtigungen.",
+    "notificationsError": {
+      "permission_denied": "Benachrichtigungen vom Browser blockiert. Prüfe die Website-Berechtigungen.",
+      "push_not_configured": "Push ist auf dieser Instanz nicht eingerichtet. Der Administrator muss die VAPID-Schlüssel hinterlegen.",
+      "failed": "Benachrichtigungen konnten nicht aktiviert werden. Bitte versuche es erneut."
+    },
     "sendTestNotification": "Testbenachrichtigung senden",
     "testNotificationSent": "Testbenachrichtigung gesendet ✓",
     "testNotificationFailed": "Nichts zugestellt. Aktiviere die Benachrichtigungen auf diesem Gerät erneut.",

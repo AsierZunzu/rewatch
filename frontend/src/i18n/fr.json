@@ -190,7 +190,11 @@
     "notifications": "Notifications de sortie",
     "notificationsHint": "Un push dès qu'un épisode est sorti",
     "notificationsUnsupported": "non supporté ici*",
-    "notificationsDenied": "Notifications refusées par le navigateur — vérifiez les permissions du site.",
+    "notificationsError": {
+      "permission_denied": "Notifications refusées par le navigateur. Vérifiez les permissions du site.",
+      "push_not_configured": "Le push n'est pas configuré sur cette instance. L'administrateur doit renseigner les clés VAPID.",
+      "failed": "Impossible d'activer les notifications. Réessayez."
+    },
     "sendTestNotification": "Envoyer une notification de test",
     "testNotificationSent": "Notification de test envoyée ✓",
     "testNotificationFailed": "Aucune livraison — réactivez les notifications sur cet appareil.",

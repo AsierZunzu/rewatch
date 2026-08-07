@@ -32,8 +32,13 @@ function NotificationsRow() {
         await subscribeToPush()
         setEnabled(true)
       }
-    } catch {
-      alert(t('profile.notificationsDenied'))
+    } catch (err) {
+      // Only `permission_denied` is about the browser's permissions. Saying so
+      // on any failure sent people digging through their OS settings for a
+      // server-side misconfiguration.
+      const reason = err instanceof Error ? err.message : ''
+      const code = reason === 'permission_denied' || reason === 'push_not_configured' ? reason : 'failed'
+      alert(t(`profile.notificationsError.${code}`))
     } finally {
       setBusy(false)
     }

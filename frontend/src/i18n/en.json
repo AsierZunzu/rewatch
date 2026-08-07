@@ -190,7 +190,11 @@
     "notifications": "Release notifications",
     "notificationsHint": "A push once an episode has aired",
     "notificationsUnsupported": "not supported here*",
-    "notificationsDenied": "Notifications blocked by the browser — check the site permissions.",
+    "notificationsError": {
+      "permission_denied": "Notifications blocked by the browser — check the site permissions.",
+      "push_not_configured": "Push isn't set up on this instance. The admin needs to add the VAPID keys.",
+      "failed": "Couldn't enable notifications. Please try again."
+    },
     "sendTestNotification": "Send a test notification",
     "testNotificationSent": "Test notification sent ✓",
     "testNotificationFailed": "Nothing delivered — re-enable notifications on this device.",
