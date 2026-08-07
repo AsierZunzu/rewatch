@@ -168,6 +168,7 @@
     "importEpisodes": "<b>{{count}} episodes</b> imported across {{shows}} shows",
     "importMovies": "<b>{{count}} movies</b> matched automatically",
     "importPending": "<b>{{count}} movies</b> to resolve manually",
+    "importMoviesFailed": "<b>{{count}} movies</b> couldn't be imported",
     "importResolve": "Resolve {{count}} movies",
     "importLater": "Later",
     "importClose": "Close",

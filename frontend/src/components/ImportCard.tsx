@@ -64,6 +64,12 @@ export default function ImportCard() {
       ...(r.movies.pending > 0
         ? [{ icon: '!', ok: false, node: <Trans i18nKey="profile.importPending" values={{ count: r.movies.pending }} components={{ b: <b /> }} /> }]
         : []),
+      // A restore that silently drops films reads as a complete restore. Nothing
+      // can be done about them from here — the ids are gone from TMDB — but the
+      // count has to be said out loud.
+      ...(r.movies.failed
+        ? [{ icon: '!', ok: false, node: <Trans i18nKey="profile.importMoviesFailed" values={{ count: r.movies.failed }} components={{ b: <b /> }} /> }]
+        : []),
     ]
     return (
       <div className="bg-card rounded-[18px] border border-line p-4">

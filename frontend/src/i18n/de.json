@@ -168,6 +168,7 @@
     "importEpisodes": "<b>{{count}} Folgen</b> aus {{shows}} Serien importiert",
     "importMovies": "<b>{{count}} Filme</b> automatisch zugeordnet",
     "importPending": "<b>{{count}} Filme</b> manuell zuzuordnen",
+    "importMoviesFailed": "<b>{{count}} Filme</b> konnten nicht importiert werden",
     "importResolve": "{{count}} Filme zuordnen",
     "importLater": "Später",
     "importClose": "Schließen",
