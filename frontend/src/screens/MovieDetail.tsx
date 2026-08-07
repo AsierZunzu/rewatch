@@ -94,7 +94,10 @@ export default function MovieDetail() {
           <>
             <button
               type="button"
-              onClick={() => tracking.mutate({ method: 'delete', path: `/api/movies/${movieId}/watch` })}
+              // One tap undoes one viewing, never the whole history: this button
+              // is labelled like a status, sits next to a ×N counter, and had no
+              // confirmation, so it silently erased every rewatch of the film.
+              onClick={() => tracking.mutate({ method: 'delete', path: `/api/movies/${movieId}/watch?scope=last` })}
               className="bg-accent text-ink flex flex-1 items-center justify-center gap-1.75 rounded-xl px-1 py-2.75 text-[13px] font-extrabold"
             >
               {firstWatch ? t('movie.watchedOn', { date: frDate(firstWatch) }) : '✓'}
