@@ -136,8 +136,9 @@ model Show {
   cachedAt     DateTime  @default(now()) @map("cached_at")
 
   // Broadcast slot, expressed in the show's own country. `airsTime`/`airsTimezone`
-  // come from Trakt (`airs`); `originCountry` from TMDB and is the fallback when
-  // Trakt has nothing. Together they resolve each episode's `airsAt`.
+  // come from Trakt (`airs`) or TVmaze (`schedule` + the broadcaster's country);
+  // `originCountry` from TMDB and is the fallback when neither has a slot.
+  // Together they resolve each episode's `airsAt`.
   originCountry String?   @map("origin_country") // ISO 3166-1 alpha-2
   airsTime      String?   @map("airs_time") // "21:00", local to airsTimezone
   airsTimezone  String?   @map("airs_timezone") // IANA, e.g. "America/New_York"
@@ -182,6 +183,7 @@ enum AirsAtSource {
   TRAKT // per-episode first_aired from Trakt, already UTC
   SCHEDULE // air_date + the show's broadcast slot, in the show's timezone
   FALLBACK // air_date end-of-day in the origin country (no slot known)
+  TVMAZE // per-episode airstamp from TVmaze, already absolute
 }
 
 model Movie {

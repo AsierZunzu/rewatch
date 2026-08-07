@@ -4,8 +4,9 @@
 import { prisma } from './prisma.js'
 import * as tmdb from './tmdb.js'
 import { LANGS, LANG_TO_TMDB } from './langs.js'
-import { getShowAirTimes } from './trakt.js'
-import { applyTraktInstantsSql, resolveAirsAtSql } from './airing.js'
+import * as trakt from './trakt.js'
+import * as tvmaze from './tvmaze.js'
+import { applyExactInstantsSql, mergeAirTimes, resolveAirsAtSql, type ProviderAirTimes } from './airing.js'
 
 const STALE_MS = 24 * 60 * 60 * 1000 // refresh after 24h (ongoing shows)
 
@@ -77,26 +78,50 @@ export async function cacheShow(tmdbId: number, tvdbId?: number) {
 /**
  * Refreshes when this show's episodes actually aired.
  *
- * TMDB publishes no broadcast time at all, so the exact instants come from
- * Trakt. When Trakt is unconfigured, rate-limited, or does not know the show,
- * this still runs: the resolver falls back to the show's slot or, failing that,
- * the end of the air date in its origin country. Always leaves every episode
- * with an `airs_at`, so no caller has to special-case missing air-time data.
+ * TMDB publishes no broadcast time at all — its episodes carry a bare `air_date`
+ * and its series carry no schedule object — so the exact instants come from
+ * Trakt and TVmaze, queried together and merged by `mergeAirTimes()`. They fail
+ * independently: Trakt is silent unless the operator configured it, TVmaze needs
+ * no key but does not know every show, and either can be rate-limited. Whatever
+ * comes back, the resolver falls back to the show's slot or, failing that, the
+ * end of the air date in its origin country. Always leaves every episode with an
+ * `airs_at`, so no caller has to special-case missing air-time data.
  */
 export async function syncShowAirTimes(tmdbId: number) {
-  const air = await getShowAirTimes(tmdbId)
-  if (air) {
+  const answers = await Promise.all([
+    trakt.getShowAirTimes(tmdbId).then((air) => (air ? { ...air, source: 'TRAKT' as const } : null)),
+    tvmaze.getShowAirTimes(tmdbId).then((air) => (air ? { ...air, source: 'TVMAZE' as const } : null)),
+  ])
+  const providers = answers.filter((a): a is ProviderAirTimes => a !== null)
+  const { airs, instants, answered } = mergeAirTimes(providers)
+
+  // The slot obeys the same rule `answered` enforces on the instants: a provider
+  // that did not answer says nothing about it either. Writing null whenever the
+  // merge came back without one would let a single Trakt hiccup drop a slot only
+  // Trakt could supply — a globally released show carries no broadcaster
+  // timezone, so TVmaze answers about it with `airs: null` — and
+  // `resolveAirsAtSql` would then demote every SCHEDULE episode of that show to
+  // the coarse origin-country bound until the next sync. So a real slot always
+  // wins, and "no slot" only clears the stored one when every provider answered,
+  // which is the one case where the absence is the whole picture.
+  const slot = airs
+    ? { airsTime: airs.time, airsTimezone: airs.timezone }
+    : providers.length === answers.length
+      ? { airsTime: null, airsTimezone: null }
+      : {}
+
+  if (providers.length > 0) {
     await prisma.show.update({
       where: { tmdbId },
       data: {
-        airsTime: air.airs?.time ?? null,
-        airsTimezone: air.airs?.timezone ?? null,
+        ...slot,
         // Stamped only on a real answer, so `airsCachedAt IS NULL` keeps
         // meaning "never enriched" for the daily backfill to find.
         airsCachedAt: new Date(),
       },
     })
-    await prisma.$executeRaw(applyTraktInstantsSql(tmdbId, air.firstAired))
+    const apply = applyExactInstantsSql(tmdbId, instants, answered)
+    if (apply) await prisma.$executeRaw(apply)
   }
   await prisma.$executeRaw(resolveAirsAtSql(tmdbId))
 }
