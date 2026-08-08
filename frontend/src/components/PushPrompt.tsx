@@ -36,10 +36,16 @@ export default function PushPrompt() {
     setBusy(true)
     try {
       await subscribeToPush()
-    } catch {
-      // Permission denied — the browser remembers, don't nag again.
-    } finally {
       localStorage.setItem(DISMISSED_KEY, '1')
+    } catch (err) {
+      // Only a refusal is worth remembering: the browser won't ask twice, so
+      // nagging is pointless. A server-side failure (an instance with no VAPID
+      // keys) is the admin's to fix, and dismissing forever would mean this
+      // device never gets offered notifications again once they have.
+      if (err instanceof Error && err.message === 'permission_denied') {
+        localStorage.setItem(DISMISSED_KEY, '1')
+      }
+    } finally {
       setVisible(false)
     }
   }

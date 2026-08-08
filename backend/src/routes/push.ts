@@ -2,6 +2,7 @@ import type { FastifyInstance } from 'fastify'
 import { z } from 'zod'
 import { prisma } from '../lib/prisma.js'
 import { ensurePushConfigured, sendPushToUser } from '../lib/push.js'
+import { getSetting } from '../lib/settings.js'
 
 const subscriptionSchema = z.object({
   endpoint: z.url(),
@@ -9,10 +10,15 @@ const subscriptionSchema = z.object({
 })
 
 export default async function pushRoutes(app: FastifyInstance) {
-  // Clé publique VAPID pour PushManager.subscribe côté client.
+  // Public VAPID key for PushManager.subscribe() on the client.
+  //
+  // Read through getSetting(), like the guard above and every other consumer:
+  // reading process.env here meant an instance whose keys were generated from
+  // the admin console (stored in the settings table, never in the environment)
+  // passed the guard and then answered with an undefined key.
   app.get('/api/push/vapid-key', { preHandler: app.requireAuth }, async (_request, reply) => {
     if (!ensurePushConfigured()) return reply.code(503).send({ error: 'push_not_configured' })
-    return { key: process.env.VAPID_PUBLIC_KEY }
+    return { key: getSetting('VAPID_PUBLIC_KEY') }
   })
 
   app.put('/api/push/subscription', { preHandler: app.requireAuth }, async (request, reply) => {

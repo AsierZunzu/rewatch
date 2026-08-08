@@ -95,12 +95,26 @@ export async function syncShowAirTimes(tmdbId: number) {
   const providers = answers.filter((a): a is ProviderAirTimes => a !== null)
   const { airs, instants, answered } = mergeAirTimes(providers)
 
+  // The slot obeys the same rule `answered` enforces on the instants: a provider
+  // that did not answer says nothing about it either. Writing null whenever the
+  // merge came back without one would let a single Trakt hiccup drop a slot only
+  // Trakt could supply — a globally released show carries no broadcaster
+  // timezone, so TVmaze answers about it with `airs: null` — and
+  // `resolveAirsAtSql` would then demote every SCHEDULE episode of that show to
+  // the coarse origin-country bound until the next sync. So a real slot always
+  // wins, and "no slot" only clears the stored one when every provider answered,
+  // which is the one case where the absence is the whole picture.
+  const slot = airs
+    ? { airsTime: airs.time, airsTimezone: airs.timezone }
+    : providers.length === answers.length
+      ? { airsTime: null, airsTimezone: null }
+      : {}
+
   if (providers.length > 0) {
     await prisma.show.update({
       where: { tmdbId },
       data: {
-        airsTime: airs?.time ?? null,
-        airsTimezone: airs?.timezone ?? null,
+        ...slot,
         // Stamped only on a real answer, so `airsCachedAt IS NULL` keeps
         // meaning "never enriched" for the daily backfill to find.
         airsCachedAt: new Date(),
