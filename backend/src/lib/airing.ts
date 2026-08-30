@@ -236,14 +236,25 @@ export function resolveAirsAtSql(showTmdbId: number) {
  *     `airs_at` is what the whole app reads as "has this aired?". Those rows
  *     have their stale `airs_at` wiped too — `resolveAirsAtSql` skips undated
  *     episodes, so nothing else would ever clear it.
- *   - The instant must land within a day either side of that date. `air_date` is
- *     a bare local date and the instant is absolute, so a legitimate pair can
+ *   - The instant must land within two days either side of that date. `air_date`
+ *     is a bare local date and the instant is absolute, so a legitimate pair can
  *     straddle a UTC boundary — just past midnight in UTC+14 falls on the
- *     previous UTC day, late evening in UTC-12 on the next. Anything further out
- *     is not a timezone, it is two catalogues describing different episodes, and
- *     it is dropped rather than shown. This is the guard that keeps the instant
- *     the UI prints (`airTimeLabel` renders the day of `airs_at`, never
- *     `air_date`) from silently contradicting the date TMDB gave us.
+ *     previous UTC day, late evening in UTC-12 on the next — and the match below
+ *     tolerates a further day of its own. Anything outside that is not a
+ *     timezone, it is two catalogues describing different episodes, and it is
+ *     dropped rather than shown. This is the guard that keeps the instant the UI
+ *     prints (`airTimeLabel` renders the day of `airs_at`, never `air_date`)
+ *     from silently contradicting the date TMDB gave us.
+ *
+ * The dates are matched within a day of each other rather than exactly, because
+ * catalogues date a global streaming drop by different conventions: TVmaze files
+ * Apple TV+ releases on the network's listed day and TMDB on the day before, so
+ * whole seasons of Ted Lasso and Silo matched nothing at all and fell back to a
+ * date with no clock. An exact match always wins; a neighbouring date is only
+ * taken when *no* episode claims it exactly, so a show whose dates line up day
+ * for day can never have an episode's instant stolen by the one next to it. Two
+ * episodes a day apart on either side of a lone provider date can still both
+ * take it — bounded by a day, and better than showing nothing.
  *
  * `answered` lists the providers that actually replied. Only their rows are
  * cleared: a provider that is rate-limited or down says nothing about the
@@ -269,12 +280,22 @@ export function applyExactInstantsSql(
   return Prisma.sql`
     WITH incoming(air_date, airs_at, source) AS (VALUES ${Prisma.join(rows)}),
     accepted AS (
-      SELECT e.id, i.airs_at, i.source
+      SELECT DISTINCT ON (e.id) e.id, i.airs_at, i.source
       FROM episodes e
-      JOIN incoming i ON i.air_date = e.air_date
+      JOIN incoming i ON i.air_date BETWEEN e.air_date - 1 AND e.air_date + 1
       WHERE e.show_tmdb_id = ${showTmdbId}
-        AND i.airs_at >= (e.air_date - interval '1 day') AT TIME ZONE 'UTC'
-        AND i.airs_at < (e.air_date + interval '2 days') AT TIME ZONE 'UTC'
+        AND i.airs_at >= (e.air_date - interval '2 days') AT TIME ZONE 'UTC'
+        AND i.airs_at < (e.air_date + interval '3 days') AT TIME ZONE 'UTC'
+        AND (
+          i.air_date = e.air_date
+          OR NOT EXISTS (
+            SELECT 1 FROM episodes claimant
+            WHERE claimant.show_tmdb_id = e.show_tmdb_id AND claimant.air_date = i.air_date
+          )
+        )
+      -- Nearest date wins, and a tie goes to the later one: same reasoning as
+      -- COUNTRY_TZ, marking an episode aired early is the failure that matters.
+      ORDER BY e.id, abs(i.air_date - e.air_date), i.air_date DESC
     ),
     cleared AS (
       UPDATE episodes e
