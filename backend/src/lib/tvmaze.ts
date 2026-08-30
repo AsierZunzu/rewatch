@@ -8,7 +8,7 @@
 //
 // Docs: https://www.tvmaze.com/api
 import * as tmdb from './tmdb.js'
-import type { ShowAirTimes } from './airing.js'
+import { recordInstant, type ShowAirTimes } from './airing.js'
 
 // Overridable for the e2e stub server — leave unset in production.
 const BASE = process.env.TVMAZE_API_URL || 'https://api.tvmaze.com'
@@ -43,8 +43,11 @@ type TvmazeShow = {
 }
 
 type TvmazeEpisode = {
-  season: number | null
-  number: number | null
+  // The date the episode went out where it was broadcast, "YYYY-MM-DD". This is
+  // the field episodes are matched on, not `season`/`number`: TVmaze follows
+  // TheTVDB's numbering, which regroups seasons differently from TMDB (it gives
+  // Futurama's films seasons 8-10, so the revival starts at 11 where TMDB has 8).
+  airdate?: string | null
   airstamp?: string | null
 }
 
@@ -104,23 +107,25 @@ export async function getShowAirTimes(tmdbId: number): Promise<ShowAirTimes | nu
     const show = await lookupShow(ids)
     if (!show) return null
 
-    // `specials=1` so season 0 is dated too — TMDB numbers specials as season 0
-    // and the show page lists them like any other episode.
+    // `specials=1` so the days specials went out are dated too — TMDB numbers
+    // specials as season 0 and the show page lists them like any other episode,
+    // and a special is often the only thing airing on its date.
     const episodes = (await api<TvmazeEpisode[]>(`/shows/${show.id}/episodes?specials=1`)) ?? []
 
-    const firstAired = new Map<string, Date>()
+    const instantsByDate = new Map<string, Date>()
     for (const ep of episodes) {
-      // Specials TVmaze cannot place in the numbering carry a null number; there
-      // is no key to match them on, so they stay on the fallback.
-      if (ep.season === null || ep.number === null || !ep.airstamp) continue
+      // `airdate` is already the local calendar date, so it is used as-is rather
+      // than derived from `airstamp` — deriving it would push a late-evening
+      // broadcast onto the following UTC day and miss the TMDB date entirely.
+      if (!ep.airdate || !ep.airstamp) continue
       const at = new Date(ep.airstamp)
-      if (!Number.isNaN(at.getTime())) firstAired.set(`${ep.season}:${ep.number}`, at)
+      if (!Number.isNaN(at.getTime())) recordInstant(instantsByDate, ep.airdate, at)
     }
 
     const timezone = showTimezone(show)
     return {
       airs: show.schedule?.time && timezone ? { time: show.schedule.time, timezone } : null,
-      firstAired,
+      instantsByDate,
     }
   } catch (err) {
     // Rate limits, outages, schema drift: none of these should break caching a show.

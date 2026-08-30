@@ -3,7 +3,7 @@
 // admin settings); each user then connects their own account.
 import { prisma } from './prisma.js'
 import { getSetting } from './settings.js'
-import type { ShowAirTimes } from './airing.js'
+import { localDate, recordInstant, type ShowAirTimes } from './airing.js'
 
 // Overridable for the e2e stub server — leave unset in production.
 const BASE = process.env.TRAKT_API_URL || 'https://api.trakt.tv'
@@ -195,7 +195,10 @@ async function apiGetPublic<T>(path: string): Promise<T | null> {
 type TraktAirs = { day?: string | null; time?: string | null; timezone?: string | null }
 type TraktSeasonWithEpisodes = {
   number: number
-  episodes?: { season: number; number: number; first_aired?: string | null }[]
+  // `first_aired` is an absolute UTC instant. Trakt exposes no local air date,
+  // so the date episodes are matched on is derived from it against the show's
+  // own zone — see `getShowAirTimes()`.
+  episodes?: { first_aired?: string | null }[]
 }
 
 /**
@@ -226,18 +229,25 @@ export async function getShowAirTimes(tmdbId: number): Promise<ShowAirTimes | nu
     const seasons =
       (await apiGetPublic<TraktSeasonWithEpisodes[]>(`/shows/${traktId}/seasons?extended=episodes,full`)) ?? []
 
-    const firstAired = new Map<string, Date>()
+    // Keyed by the show's local air date, not by season/number: Trakt inherits
+    // TheTVDB's season grouping, which is not TMDB's, so the numbering is not a
+    // shared identity. See `recordInstant()` in airing.ts.
+    //
+    // Without a broadcast zone the instant is bucketed by its UTC date, which is
+    // right for the worldwide drops that make up most of that case, and off by a
+    // day at worst elsewhere — where `applyExactInstantsSql`'s window catches it.
+    const instantsByDate = new Map<string, Date>()
     for (const season of seasons) {
       for (const ep of season.episodes ?? []) {
         if (!ep.first_aired) continue
         const at = new Date(ep.first_aired)
-        if (!Number.isNaN(at.getTime())) firstAired.set(`${ep.season}:${ep.number}`, at)
+        if (!Number.isNaN(at.getTime())) recordInstant(instantsByDate, localDate(at, airs?.timezone ?? null), at)
       }
     }
 
     return {
       airs: airs?.time && airs.timezone ? { time: airs.time, timezone: airs.timezone } : null,
-      firstAired,
+      instantsByDate,
     }
   } catch (err) {
     // Rate limits, outages, schema drift: none of these should break caching a show.
