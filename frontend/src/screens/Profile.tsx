@@ -1,9 +1,10 @@
 import { useEffect, useState } from 'react'
-import { Link, useNavigate } from 'react-router-dom'
+import { Link, useNavigate, useSearchParams } from 'react-router-dom'
 import { useQueryClient } from '@tanstack/react-query'
 import { Trans, useTranslation } from 'react-i18next'
 import { api, ApiError } from '../api/client'
-import { useLegalInfo, useLibrary, useMe, usePending, useStats } from '../api/hooks'
+import { useAuthMethods, useLegalInfo, useLibrary, useMe, usePending, useStats } from '../api/hooks'
+import { oidcErrorKey, oidcStartUrl } from '../lib/oidc'
 import { ScreenTitle, Spinner } from '../components/ui'
 import { getCurrentSubscription, pushSupported, subscribeToPush, unsubscribeFromPush } from '../lib/push'
 import { isStandalone } from '../lib/install'
@@ -213,12 +214,14 @@ function TimezoneRow() {
   )
 }
 
-function PasswordModal({ onClose }: { onClose: () => void }) {
+// SSO accounts without a password set their first one: no "current" field.
+function PasswordModal({ hasPassword, onClose }: { hasPassword: boolean; onClose: () => void }) {
   const { t } = useTranslation()
   const [current, setCurrent] = useState('')
   const [next, setNext] = useState('')
   const [confirm, setConfirm] = useState('')
   const [msg, setMsg] = useState<{ ok: boolean; text: string } | null>(null)
+  const qc = useQueryClient()
 
   const submit = async (e: React.FormEvent) => {
     e.preventDefault()
@@ -227,7 +230,8 @@ function PasswordModal({ onClose }: { onClose: () => void }) {
       return
     }
     try {
-      await api.patch('/api/auth/password', { current, next })
+      await api.patch('/api/auth/password', hasPassword ? { current, next } : { next })
+      await qc.invalidateQueries({ queryKey: ['me'] })
       setMsg({ ok: true, text: t('profile.passwordChanged') })
       setTimeout(onClose, 1200)
     } catch {
@@ -245,9 +249,11 @@ function PasswordModal({ onClose }: { onClose: () => void }) {
         onClick={(e) => e.stopPropagation()}
         className="bg-surface w-full max-w-md rounded-t-3xl border border-line p-6 sm:rounded-3xl"
       >
-        <div className="text-lg font-extrabold">{t('profile.passwordModalTitle')}</div>
+        <div className="text-lg font-extrabold">{hasPassword ? t('profile.passwordModalTitle') : t('profile.setPassword')}</div>
         <div className="mt-4 flex flex-col gap-3">
-          <input type="password" placeholder={t('profile.passwordCurrent')} value={current} onChange={(e) => setCurrent(e.target.value)} className={inputClass} autoComplete="current-password" />
+          {hasPassword && (
+            <input type="password" placeholder={t('profile.passwordCurrent')} value={current} onChange={(e) => setCurrent(e.target.value)} className={inputClass} autoComplete="current-password" />
+          )}
           <input type="password" placeholder={t('profile.passwordNew')} value={next} onChange={(e) => setNext(e.target.value)} className={inputClass} autoComplete="new-password" />
           <input type="password" placeholder={t('profile.passwordConfirm')} value={confirm} onChange={(e) => setConfirm(e.target.value)} className={inputClass} autoComplete="new-password" />
           {msg && <div className={`text-[13px] font-semibold ${msg.ok ? 'text-green' : 'text-danger'}`}>{msg.text}</div>}
@@ -309,7 +315,72 @@ function EmailModal({ current, onClose }: { current: string | null; onClose: () 
   )
 }
 
-function PurgeModal({ onClose }: { onClose: () => void }) {
+// Link this account to the instance's SSO provider, or unlink it. A failed
+// link comes back here with ?oidc_error=.
+function SsoRow({ me, label, canUnlink }: { me: { oidcLinked: boolean }; label: string; canUnlink: boolean }) {
+  const { t } = useTranslation()
+  const qc = useQueryClient()
+  const [searchParams, setSearchParams] = useSearchParams()
+  const linkError = searchParams.get('oidc_error')
+
+  const unlink = async () => {
+    await api.delete('/api/auth/oidc')
+    await qc.invalidateQueries({ queryKey: ['me'] })
+  }
+
+  return (
+    <>
+      <div className="flex w-full items-center justify-between gap-3 border-t border-white/5 px-4 py-3.5">
+        <span className="text-sm font-semibold">{t('profile.ssoRow', { provider: label })}</span>
+        {me.oidcLinked ? (
+          canUnlink ? (
+            <button type="button" onClick={unlink} className="text-muted text-xs font-bold">
+              {t('profile.ssoUnlink')}
+            </button>
+          ) : (
+            <span className="text-green text-xs font-bold">{t('profile.ssoLinked')}</span>
+          )
+        ) : (
+          <a href={oidcStartUrl(true)} className="text-accent text-xs font-bold">
+            {t('profile.ssoLink')}
+          </a>
+        )}
+      </div>
+      {linkError && (
+        <button
+          type="button"
+          onClick={() => setSearchParams({}, { replace: true })}
+          className="text-danger w-full px-4 pb-3 text-left text-[12px] font-semibold"
+        >
+          {t(oidcErrorKey(linkError))}
+        </button>
+      )}
+    </>
+  )
+}
+
+type ReauthUser = { username: string; hasPassword: boolean }
+
+// Second factor of the danger-zone modals: the password, or for SSO accounts
+// (nothing to type) the username. The API checks whichever applies.
+function ReauthInput({ me, value, onChange }: { me: ReauthUser; value: string; onChange: (v: string) => void }) {
+  const { t } = useTranslation()
+  return (
+    <input
+      type={me.hasPassword ? 'password' : 'text'}
+      placeholder={me.hasPassword ? t('profile.purgePassword') : t('profile.purgeUsername', { username: me.username })}
+      value={value}
+      onChange={(e) => onChange(e.target.value)}
+      className="bg-card placeholder:text-dim rounded-[14px] border border-white/8 px-4 py-3.5 text-[14.5px] font-semibold outline-none"
+      autoComplete={me.hasPassword ? 'current-password' : 'off'}
+      autoCapitalize="none"
+    />
+  )
+}
+
+const reauthBody = (me: ReauthUser, value: string) => (me.hasPassword ? { password: value } : { confirm: value })
+
+function PurgeModal({ me, onClose }: { me: ReauthUser; onClose: () => void }) {
   const { t } = useTranslation()
   const [keyword, setKeyword] = useState('')
   const [password, setPassword] = useState('')
@@ -326,7 +397,7 @@ function PurgeModal({ onClose }: { onClose: () => void }) {
     try {
       const { deleted } = await api.delete<{ deleted: { watchEvents: number; follows: number } }>(
         '/api/account/history',
-        { password },
+        reauthBody(me, password),
       )
       await qc.invalidateQueries()
       alert(t('profile.purgeDone', { events: deleted.watchEvents, follows: deleted.follows }))
@@ -361,14 +432,7 @@ function PurgeModal({ onClose }: { onClose: () => void }) {
               autoCapitalize="characters"
             />
           </div>
-          <input
-            type="password"
-            placeholder={t('profile.purgePassword')}
-            value={password}
-            onChange={(e) => setPassword(e.target.value)}
-            className="bg-card placeholder:text-dim rounded-[14px] border border-white/8 px-4 py-3.5 text-[14.5px] font-semibold outline-none"
-            autoComplete="current-password"
-          />
+          <ReauthInput me={me} value={password} onChange={setPassword} />
           {error && <div className="text-danger text-[13px] font-semibold">{error}</div>}
           <button
             type="submit"
@@ -386,7 +450,7 @@ function PurgeModal({ onClose }: { onClose: () => void }) {
   )
 }
 
-function DeleteAccountModal({ onClose }: { onClose: () => void }) {
+function DeleteAccountModal({ me, onClose }: { me: ReauthUser; onClose: () => void }) {
   const { t } = useTranslation()
   const navigate = useNavigate()
   const [keyword, setKeyword] = useState('')
@@ -402,7 +466,7 @@ function DeleteAccountModal({ onClose }: { onClose: () => void }) {
     setBusy(true)
     setError(null)
     try {
-      await api.delete('/api/account', { password })
+      await api.delete('/api/account', reauthBody(me, password))
       qc.clear()
       navigate('/login', { replace: true })
     } catch (err) {
@@ -434,14 +498,7 @@ function DeleteAccountModal({ onClose }: { onClose: () => void }) {
               autoCapitalize="characters"
             />
           </div>
-          <input
-            type="password"
-            placeholder={t('profile.purgePassword')}
-            value={password}
-            onChange={(e) => setPassword(e.target.value)}
-            className="bg-card placeholder:text-dim rounded-[14px] border border-white/8 px-4 py-3.5 text-[14.5px] font-semibold outline-none"
-            autoComplete="current-password"
-          />
+          <ReauthInput me={me} value={password} onChange={setPassword} />
           {error && <div className="text-danger text-[13px] font-semibold">{error}</div>}
           <button
             type="submit"
@@ -466,6 +523,7 @@ export default function Profile() {
   const { data: library } = useLibrary()
   const { data: legalInfo } = useLegalInfo()
   const { data: pending } = usePending()
+  const { data: methods } = useAuthMethods()
   const [showPassword, setShowPassword] = useState(false)
   const [showEmail, setShowEmail] = useState(false)
   const [showPurge, setShowPurge] = useState(false)
@@ -594,14 +652,17 @@ export default function Profile() {
           <LanguageRow />
           <TimezoneRow />
           <ThemeRow />
-          <button
-            type="button"
-            onClick={() => setShowPassword(true)}
-            className="flex w-full items-center justify-between border-t border-white/5 px-4 py-3.5"
-          >
-            <span className="text-sm font-semibold">{t('profile.changePassword')}</span>
-            <span className="text-dim">›</span>
-          </button>
+          {methods?.password !== false && (
+            <button
+              type="button"
+              onClick={() => setShowPassword(true)}
+              className="flex w-full items-center justify-between border-t border-white/5 px-4 py-3.5"
+            >
+              <span className="text-sm font-semibold">{me.hasPassword ? t('profile.changePassword') : t('profile.setPassword')}</span>
+              <span className="text-dim">›</span>
+            </button>
+          )}
+          {methods?.oidc.enabled && <SsoRow me={me} label={methods.oidc.label} canUnlink={me.hasPassword && methods.password} />}
           <NotificationsRow />
           {!isStandalone() && (
             <Link viewTransition to="/install" className="flex w-full items-center justify-between border-t border-white/5 px-4 py-3.5">
@@ -695,10 +756,10 @@ export default function Profile() {
           </a>
         </div>
       </div>
-      {showPassword && <PasswordModal onClose={() => setShowPassword(false)} />}
+      {showPassword && <PasswordModal hasPassword={me.hasPassword} onClose={() => setShowPassword(false)} />}
       {showEmail && <EmailModal current={me.email} onClose={() => setShowEmail(false)} />}
-      {showPurge && <PurgeModal onClose={() => setShowPurge(false)} />}
-      {showDelete && <DeleteAccountModal onClose={() => setShowDelete(false)} />}
+      {showPurge && <PurgeModal me={me} onClose={() => setShowPurge(false)} />}
+      {showDelete && <DeleteAccountModal me={me} onClose={() => setShowDelete(false)} />}
     </div>
   )
 }

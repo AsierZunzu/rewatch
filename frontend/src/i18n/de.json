@@ -248,7 +248,13 @@
     "theme_light": "Hell",
     "theme_system": "Auto",
     "calendarFeedRow": "Kalender-Feed",
-    "calendarFeedRowHint": "Anstehende Folgen in jeder Kalender-App abonnieren"
+    "calendarFeedRowHint": "Anstehende Folgen in jeder Kalender-App abonnieren",
+    "setPassword": "Passwort festlegen",
+    "purgeUsername": "Gib deinen Benutzernamen ein ({{username}})",
+    "ssoRow": "Anmeldung mit {{provider}}",
+    "ssoLink": "Verknüpfen",
+    "ssoUnlink": "Trennen",
+    "ssoLinked": "Verknüpft"
   },
   "resolve": {
     "title": "Zuzuordnen",
@@ -286,7 +292,18 @@
     "tooManyAttempts": "Zu viele Versuche. Probiere es in einer Minute erneut",
     "validationHint": "Benutzername 3-30 Zeichen (Buchstaben, Ziffern, _ . -), gültige E-Mail, Passwort mindestens 8 Zeichen",
     "passwordMismatch": "Die Passwörter stimmen nicht überein",
-    "registrationClosed": "Auf dieser Instanz sind Registrierungen geschlossen"
+    "registrationClosed": "Auf dieser Instanz sind Registrierungen geschlossen",
+    "continueWith": "Weiter mit {{provider}}",
+    "or": "oder",
+    "passwordLoginDisabled": "Die Anmeldung per Passwort ist auf dieser Instanz deaktiviert",
+    "oidcError": {
+      "oidc_failed": "Single Sign-on fehlgeschlagen. Versuche es erneut.",
+      "oidc_cancelled": "Anmeldung abgebrochen.",
+      "oidc_disabled": "Single Sign-on ist auf dieser Instanz nicht eingerichtet.",
+      "oidc_email_unverified": "Ein Konto mit dieser E-Mail existiert bereits, aber dein Anbieter hat die Adresse nicht bestätigt. Melde dich mit deinem Passwort an und verknüpfe es in deinem Profil.",
+      "oidc_already_linked": "Diese Identität ist bereits mit einem anderen Konto verknüpft.",
+      "registration_closed": "Kein Konto passt zu dieser Identität und Registrierungen sind geschlossen."
+    }
   },
   "tokens": {
     "verifying": "Wird überprüft…",
@@ -424,7 +441,23 @@
     "groupTrakt": "Trakt",
     "traktClientId": "client id",
     "traktClientSecret": "client secret",
-    "traktHelp": "Optional. Ermöglicht Nutzern die Synchronisierung mit Trakt.tv: Erstelle eine (kostenlose) API-App unter trakt.tv/oauth/applications mit der Redirect-URI urn:ietf:wg:oauth:2.0:oob."
+    "traktHelp": "Optional. Ermöglicht Nutzern die Synchronisierung mit Trakt.tv: Erstelle eine (kostenlose) API-App unter trakt.tv/oauth/applications mit der Redirect-URI urn:ietf:wg:oauth:2.0:oob.",
+    "groupOidc": "Single Sign-on (OIDC)",
+    "oidc": {
+      "help": "Optional. Lege bei deinem Identitätsanbieter (Authelia, Authentik, Keycloak, Pocket ID…) einen vertraulichen Client mit der unten stehenden Redirect-URI an.",
+      "redirectUri": "Redirect-URI",
+      "OIDC_ISSUER": "Issuer-URL",
+      "OIDC_CLIENT_ID": "Client-ID",
+      "OIDC_CLIENT_SECRET": "Client-Secret",
+      "OIDC_BUTTON_LABEL": "Button-Beschriftung",
+      "OIDC_SCOPES": "Scopes",
+      "OIDC_AUTO_REGISTER": "Konten bei erster Anmeldung anlegen",
+      "OIDC_AUTO_REGISTER_HINT": "geschlossen, wenn Registrierung aus ist",
+      "OIDC_SKIP_EMAIL_VERIFIED": "Unbestätigten E-Mails vertrauen",
+      "OIDC_SKIP_EMAIL_VERIFIED_HINT": "per E-Mail verknüpfen, auch ohne email_verified",
+      "PASSWORD_LOGIN_ENABLED": "Passwort-Anmeldung",
+      "PASSWORD_LOGIN_ENABLED_HINT": "aus = nur SSO"
+    }
   },
   "tvhelp": {
     "title": "Deine TV-Time-Daten holen",

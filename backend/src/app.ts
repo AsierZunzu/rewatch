@@ -13,6 +13,7 @@ import catalogRoutes from './routes/catalog.js'
 import importRoutes from './routes/import.js'
 import calendarFeedRoutes from './routes/calendar-feed.js'
 import libraryRoutes from './routes/library.js'
+import oidcRoutes from './routes/oidc.js'
 import pushRoutes from './routes/push.js'
 import settingsRoutes from './routes/settings.js'
 import statsRoutes from './routes/stats.js'
@@ -49,6 +50,7 @@ export async function buildApp() {
   app.get('/api/health', async () => ({ status: 'ok' }))
 
   await app.register(authRoutes)
+  await app.register(oidcRoutes)
   await app.register(accountRoutes)
   await app.register(adminRoutes)
   await app.register(catalogRoutes)

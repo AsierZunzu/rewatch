@@ -30,6 +30,14 @@ const valueSchemas: Record<SettingKey, z.ZodType<string>> = {
   LEGAL_CONTACT: z.string().max(320),
   TRAKT_CLIENT_ID: z.string().max(100),
   TRAKT_CLIENT_SECRET: z.string().max(100),
+  OIDC_ISSUER: z.union([z.literal(''), z.url().transform((u) => u.replace(/\/$/, ''))]),
+  OIDC_CLIENT_ID: z.string().max(300),
+  OIDC_CLIENT_SECRET: z.string().max(500),
+  OIDC_BUTTON_LABEL: z.string().max(60),
+  OIDC_SCOPES: z.string().max(300),
+  OIDC_SKIP_EMAIL_VERIFIED: z.enum(['true', 'false']),
+  OIDC_AUTO_REGISTER: z.enum(['true', 'false']),
+  PASSWORD_LOGIN_ENABLED: z.enum(['true', 'false']),
 }
 
 export default async function settingsRoutes(app: FastifyInstance) {
@@ -71,6 +79,15 @@ export default async function settingsRoutes(app: FastifyInstance) {
       if (!parsed.success) return reply.code(400).send({ error: 'invalid_value', key })
       if (isEnvLocked(key as SettingKey)) return reply.code(400).send({ error: 'env_locked', key })
       values[key as SettingKey] = parsed.data
+    }
+    // Turning passwords off without a working alternative locks everyone out,
+    // the admin included.
+    const after = (key: SettingKey) => (key in values ? values[key] || undefined : getSetting(key))
+    if (
+      after('PASSWORD_LOGIN_ENABLED') === 'false' &&
+      (!after('OIDC_ISSUER') || !after('OIDC_CLIENT_ID') || !after('OIDC_CLIENT_SECRET'))
+    ) {
+      return reply.code(400).send({ error: 'oidc_required', key: 'PASSWORD_LOGIN_ENABLED' })
     }
     await saveSettings(values)
     app.log.warn({ admin: request.user!.id, action: 'settings-update', keys: Object.keys(values) }, 'admin action')

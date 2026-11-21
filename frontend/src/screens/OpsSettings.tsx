@@ -318,6 +318,62 @@ function TraktFields({ form }: { form: ReturnType<typeof useSettingsForm> }) {
   )
 }
 
+function OidcFields({ form }: { form: ReturnType<typeof useSettingsForm> }) {
+  const { t } = useTranslation()
+  const appUrl = (form.shown('APP_URL') || window.location.origin).replace(/\/$/, '')
+  const text = (key: string, placeholder?: string) => (
+    <div>
+      <Label text={t(`ops.oidc.${key}`)} hint={form.get(key)?.envLocked ? t('ops.envLocked') : undefined} />
+      <input
+        className={field}
+        disabled={form.get(key)?.envLocked}
+        placeholder={placeholder}
+        value={form.shown(key)}
+        onChange={(e) => form.edit(key, e.target.value)}
+      />
+    </div>
+  )
+  const toggle = (key: string, fallback: boolean) => (
+    <div className="flex items-center justify-between gap-4">
+      <Label text={t(`ops.oidc.${key}`)} hint={form.get(key)?.envLocked ? t('ops.envLocked') : t(`ops.oidc.${key}_HINT`)} />
+      <Toggle
+        on={(form.shown(key) || String(fallback)) === 'true'}
+        disabled={form.get(key)?.envLocked}
+        onChange={(v) => form.edit(key, String(v))}
+      />
+    </div>
+  )
+  return (
+    <div className="flex flex-col gap-3">
+      <div className="text-[10.5px] leading-relaxed text-[var(--ops-dim)]">{t('ops.oidc.help')}</div>
+      <div>
+        <Label text={t('ops.oidc.redirectUri')} />
+        <input className={field} readOnly value={`${appUrl}/api/auth/oidc/callback`} onFocus={(e) => e.target.select()} />
+      </div>
+      {text('OIDC_ISSUER', 'https://auth.example.org')}
+      {text('OIDC_CLIENT_ID')}
+      <div>
+        <Label text={t('ops.oidc.OIDC_CLIENT_SECRET')} hint={form.get('OIDC_CLIENT_SECRET')?.set ? t('ops.secretSet') : undefined} />
+        <input
+          className={field}
+          type="password"
+          autoComplete="off"
+          placeholder={form.get('OIDC_CLIENT_SECRET')?.set ? '••••••••' : ''}
+          disabled={form.get('OIDC_CLIENT_SECRET')?.envLocked}
+          value={form.shown('OIDC_CLIENT_SECRET')}
+          onChange={(e) => form.edit('OIDC_CLIENT_SECRET', e.target.value)}
+        />
+      </div>
+      {text('OIDC_BUTTON_LABEL', 'SSO')}
+      {text('OIDC_SCOPES', 'openid email profile')}
+      {toggle('OIDC_AUTO_REGISTER', true)}
+      {toggle('OIDC_SKIP_EMAIL_VERIFIED', false)}
+      {/* The API refuses "off" until the provider above is configured. */}
+      {toggle('PASSWORD_LOGIN_ENABLED', true)}
+    </div>
+  )
+}
+
 // ——— Console panel ———
 
 export function SettingsPanel() {
@@ -331,6 +387,7 @@ export function SettingsPanel() {
     [t('ops.groupEmail'), <EmailFields key="e" form={form} />],
     [t('ops.groupPush'), <PushFields key="p" form={form} />],
     [t('ops.groupTrakt'), <TraktFields key="k" form={form} />],
+    [t('ops.groupOidc'), <OidcFields key="o" form={form} />],
   ]
 
   return (

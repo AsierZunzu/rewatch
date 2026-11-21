@@ -113,6 +113,15 @@ Serve `frontend/dist` as static files and proxy `/api/` to the backend port (ngi
 
 Everything except `DATABASE_URL` is configurable from the admin console (`/admin`, Settings panel): TMDB key and cache language, public URL, SMTP, Web Push keys, open/closed signups, and an optional privacy/legal page if your instance hosts other people. Environment variables with the same names ([`backend/.env.example`](backend/.env.example)) always take precedence when set, so config-as-code deployments work too — the console shows those values as locked.
 
+### Single sign-on (OIDC)
+
+Rewatch can sign users in through one OpenID Connect provider (Authelia, Authentik, Keycloak, Pocket ID, Dex…). On the provider, register a confidential client with the redirect URI `<APP_URL>/api/auth/oidc/callback` and the `openid email profile` scopes, then fill in the issuer URL, client ID and secret in the admin console (or the `OIDC_*` variables). The login screen then shows a "Continue with …" button.
+
+- A first SSO login creates the account, unless signups are closed (`REGISTRATION_ENABLED=false` or `OIDC_AUTO_REGISTER=false`). On a fresh instance it becomes the administrator, like the first password signup.
+- If an account with the same email already exists, it is linked, but only when the provider marks the email as verified. For providers that don't send `email_verified`, set `OIDC_SKIP_EMAIL_VERIFIED=true` if you trust their addresses.
+- Users can also link or unlink SSO from their profile.
+- `PASSWORD_LOGIN_ENABLED=false` makes the instance SSO-only: no password form, signup or reset. The console refuses it until the provider is configured.
+
 ### Admin
 
 The first account created on a fresh instance is the administrator. Additional admins are granted directly in SQL, on purpose:

@@ -1,10 +1,11 @@
 import { useState } from 'react'
-import { Link, useNavigate } from 'react-router-dom'
+import { Link, useNavigate, useSearchParams } from 'react-router-dom'
 import { useQueryClient } from '@tanstack/react-query'
 import { useTranslation } from 'react-i18next'
 import { api, ApiError } from '../api/client'
-import { useLegalInfo } from '../api/hooks'
+import { useAuthMethods, useLegalInfo } from '../api/hooks'
 import { browserLang } from '../i18n'
+import { oidcErrorKey, oidcStartUrl } from '../lib/oidc'
 
 type Mode = 'login' | 'register' | 'forgot'
 
@@ -14,17 +15,25 @@ const inputClass =
 export default function Login() {
   const { t } = useTranslation()
   const { data: legalInfo } = useLegalInfo()
+  const { data: methods } = useAuthMethods()
+  const [searchParams] = useSearchParams()
+  const oidcError = searchParams.get('error')
   const [mode, setMode] = useState<Mode>('login')
   const [username, setUsername] = useState('')
   const [email, setEmail] = useState('')
   const [password, setPassword] = useState('')
   const [confirm, setConfirm] = useState('')
   const [showPassword, setShowPassword] = useState(false)
-  const [error, setError] = useState<string | null>(null)
+  const [error, setError] = useState<string | null>(
+    oidcError ? t(oidcErrorKey(oidcError)) : null,
+  )
   const [info, setInfo] = useState<string | null>(null)
   const [busy, setBusy] = useState(false)
   const navigate = useNavigate()
   const qc = useQueryClient()
+  // Optimistic until the API says otherwise: an SSO-only instance briefly
+  // showing the form beats a password instance flashing an empty screen.
+  const passwordOn = methods?.password !== false
 
   const switchMode = (m: Mode) => {
     setMode(m)
@@ -63,7 +72,9 @@ export default function Login() {
     } catch (err) {
       if (err instanceof ApiError) {
         setError(
-          err.code === 'registration_closed'
+          err.code === 'password_login_disabled'
+            ? t('auth.passwordLoginDisabled')
+            : err.code === 'registration_closed'
             ? t('auth.registrationClosed')
             : err.code === 'invalid_credentials'
               ? t('auth.invalidCredentials')
@@ -102,7 +113,28 @@ export default function Login() {
         </>
       )}
 
-      <form onSubmit={submit} className="mt-7 flex flex-col gap-3">
+      {methods?.oidc.enabled && mode !== 'forgot' && (
+        <div className="mt-7 flex flex-col gap-3">
+          <a
+            href={oidcStartUrl()}
+            className="bg-card rounded-[14px] border border-white/8 py-3.75 text-center text-[15px] font-extrabold"
+          >
+            {t('auth.continueWith', { provider: methods.oidc.label })}
+          </a>
+          {passwordOn && (
+            <div className="text-dim flex items-center gap-3 text-[11.5px] font-bold tracking-widest uppercase">
+              <span className="h-px flex-1 bg-white/8" />
+              {t('auth.or')}
+              <span className="h-px flex-1 bg-white/8" />
+            </div>
+          )}
+          {!passwordOn && error && <div className="text-danger text-[13px] font-semibold">{error}</div>}
+        </div>
+      )}
+
+      {passwordOn && (
+      <>
+      <form onSubmit={submit} className={`${methods?.oidc.enabled && mode !== 'forgot' ? 'mt-3' : 'mt-7'} flex flex-col gap-3`}>
         {mode !== 'forgot' && (
           <input
             className={inputClass}
@@ -182,6 +214,8 @@ export default function Login() {
           </>
         )}
       </div>
+      </>
+      )}
 
       <div className="text-dim mt-8 flex items-center justify-center gap-1.5 text-[11.5px] font-semibold">
         <a href="https://github.com/gulian/rewatch" target="_blank" rel="noreferrer">

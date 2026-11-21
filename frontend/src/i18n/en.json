@@ -248,7 +248,13 @@
     "theme_light": "Light",
     "theme_system": "Auto",
     "calendarFeedRow": "Calendar feed",
-    "calendarFeedRowHint": "Subscribe to upcoming episodes from any calendar app"
+    "calendarFeedRowHint": "Subscribe to upcoming episodes from any calendar app",
+    "setPassword": "Set a password",
+    "purgeUsername": "Type your username ({{username}})",
+    "ssoRow": "Sign in with {{provider}}",
+    "ssoLink": "Link",
+    "ssoUnlink": "Unlink",
+    "ssoLinked": "Linked"
   },
   "resolve": {
     "title": "To resolve",
@@ -286,7 +292,18 @@
     "tooManyAttempts": "Too many attempts — try again in a minute",
     "validationHint": "Username 3-30 chars (letters, digits, _ . -), valid email, password 8 chars minimum",
     "passwordMismatch": "Passwords don't match",
-    "registrationClosed": "Signups are closed on this instance"
+    "registrationClosed": "Signups are closed on this instance",
+    "continueWith": "Continue with {{provider}}",
+    "or": "or",
+    "passwordLoginDisabled": "Password sign-in is disabled on this instance",
+    "oidcError": {
+      "oidc_failed": "Single sign-on failed. Try again.",
+      "oidc_cancelled": "Sign-in was cancelled.",
+      "oidc_disabled": "Single sign-on is not configured on this instance.",
+      "oidc_email_unverified": "An account with this email already exists, but your provider has not verified the address. Sign in with your password and link it from your profile.",
+      "oidc_already_linked": "That identity is already linked to another account.",
+      "registration_closed": "No account matches this identity and signups are closed."
+    }
   },
   "tokens": {
     "verifying": "Verifying…",
@@ -424,7 +441,23 @@
     "groupTrakt": "Trakt",
     "traktClientId": "client id",
     "traktClientSecret": "client secret",
-    "traktHelp": "Optional. Lets users sync with Trakt.tv: create a (free) API app at trakt.tv/oauth/applications with redirect uri urn:ietf:wg:oauth:2.0:oob."
+    "traktHelp": "Optional. Lets users sync with Trakt.tv: create a (free) API app at trakt.tv/oauth/applications with redirect uri urn:ietf:wg:oauth:2.0:oob.",
+    "groupOidc": "Single sign-on (OIDC)",
+    "oidc": {
+      "help": "Optional. Register a confidential client on your identity provider (Authelia, Authentik, Keycloak, Pocket ID…) with the redirect URI below.",
+      "redirectUri": "Redirect URI",
+      "OIDC_ISSUER": "Issuer URL",
+      "OIDC_CLIENT_ID": "Client ID",
+      "OIDC_CLIENT_SECRET": "Client secret",
+      "OIDC_BUTTON_LABEL": "Button label",
+      "OIDC_SCOPES": "Scopes",
+      "OIDC_AUTO_REGISTER": "Create accounts on first login",
+      "OIDC_AUTO_REGISTER_HINT": "still closed when registration is off",
+      "OIDC_SKIP_EMAIL_VERIFIED": "Trust unverified emails",
+      "OIDC_SKIP_EMAIL_VERIFIED_HINT": "link by email even without email_verified",
+      "PASSWORD_LOGIN_ENABLED": "Password login",
+      "PASSWORD_LOGIN_ENABLED_HINT": "off = SSO only"
+    }
   },
   "tvhelp": {
     "title": "Get your TV Time data",

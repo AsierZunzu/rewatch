@@ -5,6 +5,7 @@ import { z } from 'zod'
 import { prisma } from '../lib/prisma.js'
 import { Prisma } from '../generated/prisma/client.js'
 import { createAuthToken } from '../lib/auth-tokens.js'
+import { passwordLoginEnabled } from '../lib/oidc.js'
 import { sendResetEmail, sendVerificationEmail, type Lang } from '../lib/mailer.js'
 import { isBlocked, verifyDeadline, VERIFY_GRACE_MS } from '../lib/verification.js'
 
@@ -214,6 +215,8 @@ export default async function adminRoutes(app: FastifyInstance) {
     const user = await prisma.user.findUnique({ where: { id: params.data.id } })
     if (!user) return reply.code(404).send({ error: 'not_found' })
     if (!user.email) return reply.code(400).send({ error: 'no_email' })
+    // The link would land on a reset endpoint that refuses everything.
+    if (!passwordLoginEnabled()) return reply.code(400).send({ error: 'password_login_disabled' })
 
     const token = await createAuthToken(user.id, 'RESET_PASSWORD')
     await sendResetEmail(user.email, user.username, token, user.language as Lang)

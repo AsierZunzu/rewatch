@@ -1,4 +1,4 @@
-import type { FastifyInstance } from 'fastify'
+import type { FastifyInstance, FastifyReply, FastifyRequest } from 'fastify'
 import argon2 from 'argon2'
 import { z } from 'zod'
 import { prisma } from '../lib/prisma.js'
@@ -8,6 +8,7 @@ import { sendResetEmail, sendVerificationEmail } from '../lib/mailer.js'
 import { DEFAULT_LANG, LANGS, toLang } from '../lib/langs.js'
 import { isBlocked, verifyDeadline } from '../lib/verification.js'
 import { getSetting } from '../lib/settings.js'
+import { passwordLoginEnabled } from '../lib/oidc.js'
 
 const usernameSchema = z
   .string()
@@ -37,10 +38,16 @@ type UserRow = {
   language: string
   timezone: string
   isAdmin: boolean
+  passwordHash: string | null
   createdAt: Date
 }
 
-const publicUser = (u: UserRow) => ({
+// OIDC-only instances: every password entry point answers the same way.
+const requirePasswordLogin = async (_request: FastifyRequest, reply: FastifyReply) => {
+  if (!passwordLoginEnabled()) return reply.code(403).send({ error: 'password_login_disabled' })
+}
+
+const publicUser = async (u: UserRow) => ({
   id: u.id,
   username: u.username,
   email: u.email,
@@ -51,11 +58,14 @@ const publicUser = (u: UserRow) => ({
   // The frontend shows the gate when blocked, and the deadline before that.
   blocked: isBlocked(u),
   verifyDeadline: verifyDeadline(u),
+  // The profile page adapts: no "current password" field, link/unlink SSO.
+  hasPassword: u.passwordHash !== null,
+  oidcLinked: (await prisma.oidcIdentity.count({ where: { userId: u.id } })) > 0,
   createdAt: u.createdAt,
 })
 
 export default async function authRoutes(app: FastifyInstance) {
-  app.post('/api/auth/register', { config: strictRateLimit }, async (request, reply) => {
+  app.post('/api/auth/register', { preHandler: requirePasswordLogin, config: strictRateLimit }, async (request, reply) => {
     // Instance operators can close self-service signups.
     if (getSetting('REGISTRATION_ENABLED') === 'false') {
       return reply.code(403).send({ error: 'registration_closed' })
@@ -93,10 +103,10 @@ export default async function authRoutes(app: FastifyInstance) {
     )
 
     await createSession(request, reply, user.id)
-    return reply.code(201).send(publicUser(user))
+    return reply.code(201).send(await publicUser(user))
   })
 
-  app.post('/api/auth/login', { config: strictRateLimit }, async (request, reply) => {
+  app.post('/api/auth/login', { preHandler: requirePasswordLogin, config: strictRateLimit }, async (request, reply) => {
     const parsed = z.object({ username: usernameSchema, password: passwordSchema }).safeParse(request.body)
     if (!parsed.success) {
       // Generic message: never reveal whether the account exists.
@@ -105,7 +115,8 @@ export default async function authRoutes(app: FastifyInstance) {
     const { username, password } = parsed.data
 
     const user = await prisma.user.findUnique({ where: { username } })
-    if (!user || !(await argon2.verify(user.passwordHash, password))) {
+    // SSO-only accounts have no hash: same generic answer as a wrong password.
+    if (!user?.passwordHash || !(await argon2.verify(user.passwordHash, password))) {
       return reply.code(401).send({ error: 'invalid_credentials' })
     }
 
@@ -191,7 +202,7 @@ export default async function authRoutes(app: FastifyInstance) {
 
   // ——— Forgot password ———
 
-  app.post('/api/auth/forgot', { config: strictRateLimit }, async (request, reply) => {
+  app.post('/api/auth/forgot', { preHandler: requirePasswordLogin, config: strictRateLimit }, async (request, reply) => {
     const body = z.object({ email: emailSchema }).safeParse(request.body)
     // Always 200: never reveal whether the address is known.
     if (!body.success) return { ok: true }
@@ -208,7 +219,7 @@ export default async function authRoutes(app: FastifyInstance) {
     return { ok: true }
   })
 
-  app.post('/api/auth/reset', { config: strictRateLimit }, async (request, reply) => {
+  app.post('/api/auth/reset', { preHandler: requirePasswordLogin, config: strictRateLimit }, async (request, reply) => {
     const body = z.object({ token: z.string().min(1), password: passwordSchema }).safeParse(request.body)
     if (!body.success) return reply.code(400).send({ error: 'invalid_input' })
 
@@ -223,18 +234,23 @@ export default async function authRoutes(app: FastifyInstance) {
     return { ok: true }
   })
 
-  app.patch('/api/auth/password', { preHandler: app.requireAuth, config: strictRateLimit }, async (request, reply) => {
-    const body = z.object({ current: z.string().min(1), next: passwordSchema }).safeParse(request.body)
-    if (!body.success) return reply.code(400).send({ error: 'invalid_input' })
+  app.patch(
+    '/api/auth/password',
+    { preHandler: [app.requireAuth, requirePasswordLogin], config: strictRateLimit },
+    async (request, reply) => {
+      // `current` is omitted by SSO accounts setting their first password.
+      const body = z.object({ current: z.string().min(1).optional(), next: passwordSchema }).safeParse(request.body)
+      if (!body.success) return reply.code(400).send({ error: 'invalid_input' })
 
-    const user = await prisma.user.findUniqueOrThrow({ where: { id: request.user!.id } })
-    if (!(await argon2.verify(user.passwordHash, body.data.current))) {
-      return reply.code(401).send({ error: 'invalid_credentials' })
-    }
-    await prisma.user.update({
-      where: { id: user.id },
-      data: { passwordHash: await argon2.hash(body.data.next) },
-    })
-    return { ok: true }
-  })
+      const user = await prisma.user.findUniqueOrThrow({ where: { id: request.user!.id } })
+      if (user.passwordHash && !(body.data.current && (await argon2.verify(user.passwordHash, body.data.current)))) {
+        return reply.code(401).send({ error: 'invalid_credentials' })
+      }
+      await prisma.user.update({
+        where: { id: user.id },
+        data: { passwordHash: await argon2.hash(body.data.next) },
+      })
+      return { ok: true }
+    },
+  )
 }

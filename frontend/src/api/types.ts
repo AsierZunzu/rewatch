@@ -10,7 +10,15 @@ export type User = {
   isAdmin: boolean
   blocked: boolean
   verifyDeadline: string | null
+  // False for accounts created through SSO that never set a password.
+  hasPassword: boolean
+  oidcLinked: boolean
   createdAt: string
+}
+
+export type AuthMethods = {
+  password: boolean
+  oidc: { enabled: boolean; label: string }
 }
 
 export type Show = {
