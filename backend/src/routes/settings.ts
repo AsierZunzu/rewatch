@@ -1,6 +1,6 @@
 // Admin-editable instance settings + first-run helpers.
 import type { FastifyInstance } from 'fastify'
-import webpush from 'web-push'
+import * as webpush from 'web-push'
 import { z } from 'zod'
 import {
   SETTING_KEYS,
