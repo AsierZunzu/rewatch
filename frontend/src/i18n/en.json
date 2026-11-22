@@ -21,7 +21,7 @@
     "showsInProgress": "{{count}} show in progress",
     "showsInProgress_other": "{{count}} shows in progress",
     "justChecked": "Watched! Loading {{code}}…",
-    "remainingInSeason_other": "{{count}} episodes left · Season {{season}}",
+    "positionInSeason": "{{number}}/{{total}} · Season {{season}}",
     "behind": "{{count}} episodes behind",
     "lastOfSeason": "Last episode of the season",
     "lastAired": "Latest aired episode",

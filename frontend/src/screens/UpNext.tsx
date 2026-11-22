@@ -32,7 +32,11 @@ function UpNextCard({ item }: { item: WatchlistShow }) {
         ? // Caught up mid-season: one to watch, but more still to be broadcast.
           { text: t('upnext.lastAired'), minutes: item.seasonRemainingMinutes, tone: 'normal' as const }
         : {
-            text: t('upnext.remainingInSeason', { count: item.seasonRemaining, season: item.nextEpisode.season }),
+            text: t('upnext.positionInSeason', {
+              number: item.nextEpisode.number,
+              total: item.seasonEpisodes,
+              season: item.nextEpisode.season,
+            }),
             minutes: item.seasonRemainingMinutes,
             tone: 'normal' as const,
           }
@@ -40,8 +44,8 @@ function UpNextCard({ item }: { item: WatchlistShow }) {
   // The card's episode is always one that has aired, so this reads as history —
   // it dates the backlog ("last aired" three weeks ago is worth seeing).
   const airedAt = knownAirInstant(item.nextEpisode)
-  const progressPct =
-    item.totalRemaining > 0 ? Math.max(4, 100 - (item.seasonRemaining / (item.seasonRemaining + 3)) * 100) : 100
+  // Progress through the whole series (aired episodes), not the season.
+  const progressPct = item.totalAired > 0 ? ((item.totalAired - item.totalRemaining) / item.totalAired) * 100 : 0
 
   const check = async () => {
     setJustChecked(true)
