@@ -1,6 +1,6 @@
 // Web Push. Two rules learned the hard way: VAPID config fails loudly
 // (never silently), and dead subscriptions (404/410) are cleaned up on send.
-import webpush from 'web-push'
+import * as webpush from 'web-push'
 import { prisma } from './prisma.js'
 import { getSetting, onSettingsChange } from './settings.js'
 
