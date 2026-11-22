@@ -8,7 +8,13 @@
     "build": "tsc",
     "start": "node dist/server.js",
     "prisma:generate": "prisma generate",
-    "prisma:migrate": "prisma migrate dev"
+    "prisma:migrate": "prisma migrate dev",
+    "typecheck": "tsc --noEmit",
+    "test": "vitest run",
+    "test:unit": "vitest run --project unit",
+    "test:integration": "vitest run --project integration",
+    "test:watch": "vitest",
+    "test:db": "docker compose -f docker-compose.test.yml up -d --wait"
   },
   "dependencies": {
     "@fastify/cookie": "^11.1.5",
@@ -34,6 +40,7 @@
     "@types/web-push": "^3.6.4",
     "prisma": "^7.10.1",
     "tsx": "^4.23.15",
-    "typescript": "^6.0.3"
+    "typescript": "^6.0.3",
+    "vitest": "^5.1.1"
   }
 }

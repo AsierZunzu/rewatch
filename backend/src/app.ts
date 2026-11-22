@@ -32,8 +32,9 @@ function trustProxySetting(): string | boolean {
   return value
 }
 
-export async function buildApp() {
-  const app = Fastify({ logger: true, trustProxy: trustProxySetting() })
+// `logger` is only switched off by the test suite, which builds an app per file.
+export async function buildApp({ logger = true }: { logger?: boolean } = {}) {
+  const app = Fastify({ logger, trustProxy: trustProxySetting() })
 
   await app.register(cookie)
   await app.register(multipart, { limits: { fileSize: 30 * 1024 * 1024, files: 1 } })
