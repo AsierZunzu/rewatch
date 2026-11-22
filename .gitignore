@@ -4,3 +4,4 @@ dev-dist/
 .env
 *.log
 backend/src/generated/
+compose.override.yml
