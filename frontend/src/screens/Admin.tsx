@@ -263,10 +263,14 @@ function AccountsPanel({ meId }: { meId?: number }) {
     return () => clearTimeout(id)
   }, [searchInput])
 
-  // Any filter/sort change sends us back to the first page.
-  useEffect(() => {
+  // Any filter/sort change sends us back to the first page. Done during render
+  // so the query never fires with the stale page.
+  const filterKey = JSON.stringify([search, status, role, pageSize, sort, dir])
+  const [pageFilterKey, setPageFilterKey] = useState(filterKey)
+  if (pageFilterKey !== filterKey) {
+    setPageFilterKey(filterKey)
     setPage(1)
-  }, [search, status, role, pageSize, sort, dir])
+  }
 
   const { data, isLoading } = useAdminUsers({ page, pageSize, sort, dir, search, status, role })
   const users = data?.users ?? []
@@ -396,6 +400,7 @@ export default function Admin() {
   const { data: me } = useMe()
   const { data: metrics } = useAdminMetrics()
   const { data: overview } = useAdminOverview()
+  const [now] = useState(() => Date.now())
 
   if (me && !me.isAdmin) {
     navigate('/', { replace: true })
@@ -405,7 +410,7 @@ export default function Admin() {
   // Always render 12 week slots so a young instance doesn't show one giant bar.
   const weekMs = 7 * 24 * 60 * 60 * 1000
   const signupWeeks = Array.from({ length: 12 }, (_, i) => {
-    const start = new Date(Date.now() - (11 - i) * weekMs)
+    const start = new Date(now - (11 - i) * weekMs)
     const found = overview?.signupsByWeek.find(
       (w) => Math.abs(new Date(w.week).getTime() - start.getTime()) < weekMs / 2,
     )

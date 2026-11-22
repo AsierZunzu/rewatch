@@ -7,7 +7,10 @@ import { useMe, useStats } from '../api/hooks'
 import { minutesToDaysHours } from '../lib/format'
 import PullToRefresh from './PullToRefresh'
 import PushPrompt from './PushPrompt'
-import { LENS_BACKDROP, LiquidGlassFilter, useLensSupport } from './LiquidGlass'
+import { LENS_BACKDROP, LiquidGlassFilter } from './LiquidGlass'
+
+// Chromium is the only engine that applies SVG filters in backdrop-filter.
+const LENS_SUPPORTED = 'chrome' in window
 
 // Nav icons — SVG paths from the design.
 const TABS = [
@@ -67,7 +70,6 @@ export default function Layout() {
   const { t } = useTranslation()
   const { data: me } = useMe()
   const { data: stats } = useStats()
-  const lens = useLensSupport()
   const location = useLocation()
   useTraktPullOnOpen()
 
@@ -136,9 +138,9 @@ export default function Layout() {
           Chromium gets true edge refraction (SVG displacement map); others
           keep the plain blur fallback. */}
       <nav
-        style={lens ? { backdropFilter: LENS_BACKDROP, WebkitBackdropFilter: LENS_BACKDROP } : undefined}
+        style={LENS_SUPPORTED ? { backdropFilter: LENS_BACKDROP, WebkitBackdropFilter: LENS_BACKDROP } : undefined}
         className={`fixed inset-x-3 bottom-[max(0.75rem,env(safe-area-inset-bottom))] z-20 flex gap-1 rounded-[30px] border border-white/12 px-2 py-1.5 shadow-[inset_0_1px_0_rgba(255,255,255,.12),0_10px_40px_rgba(0,0,0,.55)] lg:hidden ${
-          lens ? 'bg-[var(--t-nav-glass-lens)]' : 'bg-[var(--t-nav-glass)] backdrop-blur-2xl backdrop-saturate-150'
+          LENS_SUPPORTED ? 'bg-[var(--t-nav-glass-lens)]' : 'bg-[var(--t-nav-glass)] backdrop-blur-2xl backdrop-saturate-150'
         }`}
       >
         {TABS.map((tab) => (

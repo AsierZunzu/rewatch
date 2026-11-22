@@ -2,8 +2,6 @@
 // with `backdrop-filter: url(#…)`. Chromium only — Safari/Firefox ignore
 // SVG filters in backdrop-filter, so callers keep a plain blur fallback.
 // Technique popularized by liquid-glass.maxrovensky.com.
-import { useEffect, useState } from 'react'
-
 // Displacement map for a rounded capsule: red channel = X offset, green = Y.
 // Full-ramp gradients on the edge band, neutral gray (no displacement) in the
 // center — blurred so the lens fades smoothly into flat glass.
@@ -29,15 +27,6 @@ const mapSvg = `<svg xmlns="http://www.w3.org/2000/svg" width="${MAP_W}" height=
 </svg>`
 
 const mapUri = `data:image/svg+xml,${encodeURIComponent(mapSvg)}`
-
-/** True on Chromium — the only engine that applies SVG filters in backdrop-filter. */
-export function useLensSupport() {
-  const [supported, setSupported] = useState(false)
-  useEffect(() => {
-    setSupported('chrome' in window)
-  }, [])
-  return supported
-}
 
 export const LENS_BACKDROP = 'url(#liquid-lens) blur(3px) saturate(1.6)'
 

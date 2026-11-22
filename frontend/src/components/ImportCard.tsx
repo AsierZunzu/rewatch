@@ -25,11 +25,12 @@ export default function ImportCard() {
     queryFn: () => api.get<{ job: ImportJob | null }>('/api/import/jobs/latest'),
     staleTime: 0,
   })
+  const [mountedAt] = useState(() => Date.now())
   // Adopt an in-flight job, or a failure recent enough to still matter.
   const adopted =
     latest?.job &&
     (latest.job.status === 'RUNNING' ||
-      (latest.job.status === 'FAILED' && Date.now() - new Date(latest.job.updatedAt).getTime() < DAY_MS))
+      (latest.job.status === 'FAILED' && mountedAt - new Date(latest.job.updatedAt).getTime() < DAY_MS))
       ? latest.job.id
       : null
   const effectiveJobId = jobId ?? adopted
