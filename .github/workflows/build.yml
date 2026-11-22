@@ -27,10 +27,10 @@ jobs:
     steps:
       - uses: actions/checkout@v7
 
-      # Matches the node:22 base image in the Dockerfile.
+      # Matches the node:26 base image in the Dockerfile.
       - uses: actions/setup-node@v7
         with:
-          node-version: 22
+          node-version: 26
           cache: npm
           cache-dependency-path: backend/package-lock.json
 
@@ -48,7 +48,7 @@ jobs:
 
       - uses: actions/setup-node@v7
         with:
-          node-version: 22
+          node-version: 26
           cache: npm
           cache-dependency-path: frontend/package-lock.json
 
