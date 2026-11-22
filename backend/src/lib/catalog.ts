@@ -9,6 +9,7 @@ import * as tvmaze from './tvmaze.js'
 import { applyExactInstantsSql, mergeAirTimes, resolveAirsAtSql, type ProviderAirTimes } from './airing.js'
 
 const STALE_MS = 24 * 60 * 60 * 1000 // refresh after 24h (ongoing shows)
+const FINISHED_STALE_MS = 30 * STALE_MS // ended/canceled shows: 30 days, to catch renewals
 
 function parseDate(d: string | null | undefined): Date | null {
   return d ? new Date(d) : null
@@ -195,16 +196,27 @@ export async function cacheMovie(tmdbId: number) {
   return saved
 }
 
-/** Show record from cache, fetched from TMDB when missing or stale (ongoing show). */
+/** Show record from cache, fetched from TMDB when missing or stale (see `isShowStale`). */
 export async function getShowCached(tmdbId: number) {
   const cached = await prisma.show.findUnique({
     where: { tmdbId },
     include: { episodes: { orderBy: [{ season: 'asc' }, { number: 'asc' }] } },
   })
-  const stale =
-    !cached ||
-    (cached.status !== 'Ended' && cached.status !== 'Canceled' && Date.now() - cached.cachedAt.getTime() > STALE_MS)
-  return stale ? cacheShow(tmdbId) : cached
+  return !cached || isShowStale(cached) ? cacheShow(tmdbId) : cached
+}
+
+/**
+ * Whether a cached show is due for a TMDB re-fetch.
+ *
+ * Ended and canceled shows still expire, just slowly: "Ended" is not final.
+ * Miniseries get renewed and canceled shows get revived, and the only way to
+ * learn that is to ask TMDB again. Without an expiry here, the stored status
+ * is what decides whether we ever re-fetch the data that could change it, so
+ * a show cached as Ended would never pick up a new season.
+ */
+function isShowStale(show: { status: string | null; cachedAt: Date }) {
+  const finished = show.status === 'Ended' || show.status === 'Canceled'
+  return Date.now() - show.cachedAt.getTime() > (finished ? FINISHED_STALE_MS : STALE_MS)
 }
 
 export async function getMovieCached(tmdbId: number) {
