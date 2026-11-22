@@ -27,5 +27,12 @@ COPY backend/package.json backend/prisma.config.ts ./
 COPY backend/prisma prisma
 COPY --from=build /app/frontend/dist /app/frontend/dist
 
+# Run unprivileged. Defaults to the image's `node` user (1000:1000); any other
+# UID/GID works too (`user:` in compose, `--user` on docker run) since nothing
+# under /app is written at runtime. The prisma binary is called directly rather
+# than through npx, which wants a writable npm cache in $HOME.
+ENV CHECKPOINT_DISABLE=1
+USER node
+
 EXPOSE 3020
-CMD ["sh", "-c", "npx prisma migrate deploy && node dist/server.js"]
+CMD ["sh", "-c", "node_modules/.bin/prisma migrate deploy && node dist/server.js"]
