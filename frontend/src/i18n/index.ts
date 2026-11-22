@@ -7,9 +7,10 @@ import i18n from 'i18next'
 import { initReactI18next } from 'react-i18next'
 import de from './de.json'
 import en from './en.json'
+import es from './es.json'
 import fr from './fr.json'
 
-export const LANGS = ['en', 'fr', 'de'] as const
+export const LANGS = ['en', 'fr', 'de', 'es'] as const
 export type Lang = (typeof LANGS)[number]
 
 export const DEFAULT_LANG: Lang = 'en'
@@ -20,6 +21,7 @@ export const INTL_LOCALE: Record<Lang, string> = {
   en: 'en-GB',
   fr: 'fr-FR',
   de: 'de-DE',
+  es: 'es-ES',
 }
 
 export const isLang = (value: string): value is Lang => (LANGS as readonly string[]).includes(value)
@@ -40,7 +42,7 @@ export const screenshotLang = (value: string | null | undefined): Lang => {
 export const browserLang = (): Lang => toLang(navigator.language?.toLowerCase().split('-')[0])
 
 void i18n.use(initReactI18next).init({
-  resources: { en: { translation: en }, fr: { translation: fr }, de: { translation: de } },
+  resources: { en: { translation: en }, fr: { translation: fr }, de: { translation: de }, es: { translation: es } },
   lng: browserLang(),
   fallbackLng: DEFAULT_LANG,
   interpolation: { escapeValue: false }, // React already escapes

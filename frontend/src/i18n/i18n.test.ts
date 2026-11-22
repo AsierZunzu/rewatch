@@ -3,6 +3,7 @@ import { describe, expect, it } from 'vitest'
 import backendLangs from '../../../backend/src/lib/langs.ts?raw'
 import de from './de.json'
 import en from './en.json'
+import es from './es.json'
 import fr from './fr.json'
 import { browserLang, LANGS, screenshotLang, toLang } from '.'
 
@@ -15,7 +16,7 @@ const placeholders = (s: string) => [...s.matchAll(/\{\{\s*(\w+)\s*\}\}/g)].map(
 const tags = (s: string) => [...s.matchAll(/<\/?(\w+)>/g)].map((m) => m[0]).sort()
 
 const reference = new Map(flatten(en))
-const translations = { fr, de } as Record<string, Tree>
+const translations = { fr, de, es } as Record<string, Tree>
 
 describe.each(Object.keys(translations))('%s translation', (lang) => {
   const strings = new Map(flatten(translations[lang]!))
