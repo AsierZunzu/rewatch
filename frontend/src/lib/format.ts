@@ -11,7 +11,8 @@ export const tmdbImage = (path: string | null, size: 'w185' | 'w342' | 'w780' = 
 /** Design-style initial: leading article ignored ("The Office" → O). */
 export const initial = (title: string) =>
   title
-    .replace(/^(The|Le|La|Les|L')\s*/i, '')
+    // Whole words only, or "Legion" would lose its "Le" and "Theo" its "The".
+    .replace(/^(?:(?:The|Les|Le|La)\s+|L')/i, '')
     .charAt(0)
     .toUpperCase()
 
