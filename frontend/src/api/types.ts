@@ -77,9 +77,11 @@ export type WatchlistShow = {
   nextEpisode: Pick<Episode, 'id' | 'season' | 'number' | 'name' | 'airDate' | 'airsAt' | 'airsAtSource'>
   seasonRemaining: number
   totalRemaining: number
+  totalAired: number
   seasonRemainingMinutes: number
   totalRemainingMinutes: number
   isSeasonFinale: boolean
+  seasonEpisodes: number
   lastWatchedAt: string | null
 }
 export type Watchlist = { shows: WatchlistShow[]; movies: Movie[]; archivedMovies: Movie[] }

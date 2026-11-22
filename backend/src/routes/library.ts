@@ -20,9 +20,11 @@ type NextEpisodeRow = {
   airs_at_source: string | null
   season_remaining: bigint
   total_remaining: bigint
+  total_aired: bigint
   season_remaining_minutes: bigint | null
   total_remaining_minutes: bigint | null
   more_in_season: boolean
+  season_episodes: bigint
   last_watched_at: Date | null
 }
 
@@ -48,6 +50,10 @@ export default async function libraryRoutes(app: FastifyInstance) {
           WHERE w.user_id = ${userId} AND w.episode_id = a.id
         )
       ),
+      -- Series-wide denominator for the card's progress bar.
+      aired_counts AS (
+        SELECT show_tmdb_id, count(*) AS total_aired FROM aired GROUP BY show_tmdb_id
+      ),
       next_ep AS (
         SELECT DISTINCT ON (show_tmdb_id) *
         FROM unseen ORDER BY show_tmdb_id, season, number
@@ -70,14 +76,14 @@ export default async function libraryRoutes(app: FastifyInstance) {
       -- episodes, not from the aired CTE: an episode that merely exists — even
       -- with no air date yet — proves the next one is not the season finale.
       -- Counting only aired episodes calls every caught-up week a finale.
+      -- The season's size is read the same way, announced episodes included.
       ahead AS (
         SELECT n.show_tmdb_id,
-          EXISTS (
-            SELECT 1 FROM episodes e
-            WHERE e.show_tmdb_id = n.show_tmdb_id
-              AND e.season = n.season AND e.number > n.number
-          ) AS more_in_season
+          bool_or(e.number > n.number) AS more_in_season,
+          count(*) AS season_episodes
         FROM next_ep n
+        JOIN episodes e ON e.show_tmdb_id = n.show_tmdb_id AND e.season = n.season
+        GROUP BY n.show_tmdb_id
       ),
       activity AS (
         SELECT e.show_tmdb_id, max(w.watched_at) AS last_watched_at
@@ -89,11 +95,12 @@ export default async function libraryRoutes(app: FastifyInstance) {
       SELECT
         n.show_tmdb_id, n.id AS episode_id, n.season, n.number,
         n.name AS episode_name, n.air_date, n.airs_at, n.airs_at_source,
-        c.season_remaining, c.total_remaining,
+        c.season_remaining, c.total_remaining, ac.total_aired,
         c.season_remaining_minutes, c.total_remaining_minutes,
-        h.more_in_season, a.last_watched_at
+        h.more_in_season, h.season_episodes, a.last_watched_at
       FROM next_ep n
       JOIN counts c USING (show_tmdb_id)
+      JOIN aired_counts ac USING (show_tmdb_id)
       JOIN ahead h USING (show_tmdb_id)
       LEFT JOIN activity a USING (show_tmdb_id)
       ORDER BY a.last_watched_at DESC NULLS LAST
@@ -141,9 +148,11 @@ export default async function libraryRoutes(app: FastifyInstance) {
         // what has been broadcast so far, so it gets its own flag.
         seasonRemaining: Number(r.season_remaining),
         totalRemaining: Number(r.total_remaining),
+        totalAired: Number(r.total_aired),
         seasonRemainingMinutes: Number(r.season_remaining_minutes ?? 0),
         totalRemainingMinutes: Number(r.total_remaining_minutes ?? 0),
         isSeasonFinale: !r.more_in_season,
+        seasonEpisodes: Number(r.season_episodes),
         lastWatchedAt: r.last_watched_at,
       })),
       movies,

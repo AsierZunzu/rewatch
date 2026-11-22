@@ -47,10 +47,12 @@ describe('GET /api/watchlist (Up Next)', () => {
     // Aired and unwatched: S1E2, S1E3, S2E1, S2E2. The special and S2E3+ don't count.
     expect(entry.seasonRemaining).toBe(2)
     expect(entry.totalRemaining).toBe(4)
+    expect(entry.totalAired).toBe(5)
     // S1E2 has no runtime of its own and inherits the show's 45 minutes.
     expect(entry.seasonRemainingMinutes).toBe(45 + 50)
     expect(entry.totalRemainingMinutes).toBe(45 + 50 + 40 + 40)
     expect(entry.isSeasonFinale).toBe(false)
+    expect(entry.seasonEpisodes).toBe(3)
   })
 
   it('does not call a caught-up week the season finale when more episodes are announced', async () => {
