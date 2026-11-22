@@ -13,7 +13,7 @@ import { Prisma } from '../generated/prisma/client.js'
 /**
  * Sources that hand us a real per-episode instant, best first.
  *
- * The order *is* the precedence: when both providers date the same episode, the
+ * The order *is* the precedence: when both providers time the same air date, the
  * earlier entry wins, and the later one only fills what the earlier one has no
  * answer for. Trakt leads because its `first_aired` is a genuine per-episode
  * field — TVmaze's `airstamp` is largely the weekly slot projected onto each
@@ -27,8 +27,59 @@ export type ExactAirsAtSource = (typeof EXACT_SOURCES)[number]
 export type ShowAirTimes = {
   /** The show's weekly slot, local to `timezone`. Null when the provider has none. */
   airs: { time: string; timezone: string } | null
-  /** "season:number" → exact UTC instant. Episodes it cannot date are absent. */
-  firstAired: Map<string, Date>
+  /**
+   * The show's *local calendar date* ("YYYY-MM-DD") → the exact UTC instant
+   * episodes air on that date. Dates the provider cannot time are absent.
+   *
+   * Keyed on the date rather than on season/number on purpose — see
+   * `recordInstant()` below for why.
+   */
+  instantsByDate: Map<string, Date>
+}
+
+/**
+ * Files one provider instant under its local air date, keeping the *latest*
+ * when a date carries several episodes.
+ *
+ * Why the date is the key at all: season and episode numbers are not a shared
+ * identity, they are one catalogue's coordinates. TMDB, TheTVDB and Trakt
+ * regroup the same episodes into different seasons all the time — Futurama's
+ * revival is TMDB season 8 onwards and TVmaze season 11 onwards, a fixed
+ * three-season offset — so matching on "11:6" hands one show's episode the
+ * air time of a completely different one, years apart. The air date does not
+ * drift that way: whatever a catalogue calls the episode, everyone agrees on
+ * the day it went out. And the date is all we actually need from these
+ * providers, because what they add over TMDB is the *time of day*, which is a
+ * property of the broadcast slot rather than of any one episode.
+ *
+ * Collisions (double bills, a special sharing its date, a whole season dropped
+ * at once) take the latest instant of the day. Same reasoning as `COUNTRY_TZ`
+ * below: marking an episode aired a little late is recoverable, marking it
+ * aired before it was is the bug this module exists to prevent.
+ */
+export function recordInstant(instants: Map<string, Date>, date: string, at: Date) {
+  const seen = instants.get(date)
+  if (!seen || at > seen) instants.set(date, at)
+}
+
+/**
+ * A UTC instant as a calendar date in `timezone` — the date the broadcaster
+ * would print, which is the one TMDB's `air_date` holds.
+ *
+ * `en-CA` is the locale whose short date format is already ISO. An unknown zone
+ * makes `Intl` throw, so the show's own zone is only trusted after it parses.
+ */
+export function localDate(at: Date, timezone: string | null): string {
+  try {
+    return new Intl.DateTimeFormat('en-CA', {
+      timeZone: timezone ?? 'UTC',
+      year: 'numeric',
+      month: '2-digit',
+      day: '2-digit',
+    }).format(at)
+  } catch {
+    return at.toISOString().slice(0, 10)
+  }
 }
 
 export type ProviderAirTimes = ShowAirTimes & { source: ExactAirsAtSource }
@@ -40,11 +91,11 @@ const exactSourcesSql = Prisma.join(EXACT_SOURCES.map((s) => Prisma.sql`${s}::"A
 /**
  * Folds every provider's answer into the one we store, by `EXACT_SOURCES` order.
  *
- * Merging per episode rather than picking a single winning provider matters:
- * Trakt tends to know the back catalogue and TVmaze the upcoming schedule, so a
- * show often needs both to be fully dated. The slot is *not* merged field by
- * field — `time` and `timezone` only mean something together, so they travel as
- * a pair from the best provider that has one.
+ * Merging per date rather than picking a single winning provider matters: Trakt
+ * tends to know the back catalogue and TVmaze the upcoming schedule, so a show
+ * often needs both to be fully dated. The slot is *not* merged field by field —
+ * `time` and `timezone` only mean something together, so they travel as a pair
+ * from the best provider that has one.
  */
 export function mergeAirTimes(providers: readonly ProviderAirTimes[]) {
   const ranked = [...providers].sort((a, b) => EXACT_SOURCES.indexOf(a.source) - EXACT_SOURCES.indexOf(b.source))
@@ -52,8 +103,8 @@ export function mergeAirTimes(providers: readonly ProviderAirTimes[]) {
   let airs: ShowAirTimes['airs'] = null
   for (const provider of ranked) {
     airs ??= provider.airs
-    for (const [key, at] of provider.firstAired) {
-      if (!instants.has(key)) instants.set(key, { at, source: provider.source })
+    for (const [date, at] of provider.instantsByDate) {
+      if (!instants.has(date)) instants.set(date, { at, source: provider.source })
     }
   }
   return { airs, instants, answered: ranked.map((p) => p.source) }
@@ -172,10 +223,38 @@ export function resolveAirsAtSql(showTmdbId: number) {
 }
 
 /**
- * Writes the merged per-episode instants in one statement, and clears the marking
- * on rows the answering providers no longer vouch for so `resolveAirsAtSql`
- * recomputes them — an episode Trakt or TVmaze has dropped or rescheduled must
- * not keep an instant derived from its old air date.
+ * Writes the merged instants in one statement, matching them to episodes by air
+ * date, and clears the marking on every row the answering providers no longer
+ * back so `resolveAirsAtSql` recomputes it.
+ *
+ * Two things are checked before an instant is accepted, and both are the reason
+ * this function exists rather than a plain update:
+ *
+ *   - The episode must have a TMDB `air_date` to match against. A row TMDB will
+ *     not date takes no instant: a provider that dates it is, by definition,
+ *     talking about an episode TMDB does not agree exists on that day, and
+ *     `airs_at` is what the whole app reads as "has this aired?". Those rows
+ *     have their stale `airs_at` wiped too — `resolveAirsAtSql` skips undated
+ *     episodes, so nothing else would ever clear it.
+ *   - The instant must land within two days either side of that date. `air_date`
+ *     is a bare local date and the instant is absolute, so a legitimate pair can
+ *     straddle a UTC boundary — just past midnight in UTC+14 falls on the
+ *     previous UTC day, late evening in UTC-12 on the next — and the match below
+ *     tolerates a further day of its own. Anything outside that is not a
+ *     timezone, it is two catalogues describing different episodes, and it is
+ *     dropped rather than shown. This is the guard that keeps the instant the UI
+ *     prints (`airTimeLabel` renders the day of `airs_at`, never `air_date`)
+ *     from silently contradicting the date TMDB gave us.
+ *
+ * The dates are matched within a day of each other rather than exactly, because
+ * catalogues date a global streaming drop by different conventions: TVmaze files
+ * Apple TV+ releases on the network's listed day and TMDB on the day before, so
+ * whole seasons of Ted Lasso and Silo matched nothing at all and fell back to a
+ * date with no clock. An exact match always wins; a neighbouring date is only
+ * taken when *no* episode claims it exactly, so a show whose dates line up day
+ * for day can never have an episode's instant stolen by the one next to it. Two
+ * episodes a day apart on either side of a lone provider date can still both
+ * take it — bounded by a day, and better than showing nothing.
  *
  * `answered` lists the providers that actually replied. Only their rows are
  * cleared: a provider that is rate-limited or down says nothing about the
@@ -189,10 +268,9 @@ export function applyExactInstantsSql(
 ) {
   if (answered.length === 0) return null
   const sources = Prisma.join(answered.map((s) => Prisma.sql`${s}::"AirsAtSource"`))
-  const rows = [...instants].map(([key, { at, source }]) => {
-    const [season, number] = key.split(':').map(Number)
-    return Prisma.sql`(${season}::int, ${number}::int, ${at}::timestamptz, ${source}::"AirsAtSource")`
-  })
+  const rows = [...instants].map(
+    ([date, { at, source }]) => Prisma.sql`(${date}::date, ${at}::timestamptz, ${source}::"AirsAtSource")`,
+  )
   if (rows.length === 0) {
     return Prisma.sql`
       UPDATE episodes SET airs_at_source = NULL
@@ -200,16 +278,36 @@ export function applyExactInstantsSql(
     `
   }
   return Prisma.sql`
-    WITH incoming(season, number, airs_at, source) AS (VALUES ${Prisma.join(rows)}),
+    WITH incoming(air_date, airs_at, source) AS (VALUES ${Prisma.join(rows)}),
+    accepted AS (
+      SELECT DISTINCT ON (e.id) e.id, i.airs_at, i.source
+      FROM episodes e
+      JOIN incoming i ON i.air_date BETWEEN e.air_date - 1 AND e.air_date + 1
+      WHERE e.show_tmdb_id = ${showTmdbId}
+        AND i.airs_at >= (e.air_date - interval '2 days') AT TIME ZONE 'UTC'
+        AND i.airs_at < (e.air_date + interval '3 days') AT TIME ZONE 'UTC'
+        AND (
+          i.air_date = e.air_date
+          OR NOT EXISTS (
+            SELECT 1 FROM episodes claimant
+            WHERE claimant.show_tmdb_id = e.show_tmdb_id AND claimant.air_date = i.air_date
+          )
+        )
+      -- Nearest date wins, and a tie goes to the later one: same reasoning as
+      -- COUNTRY_TZ, marking an episode aired early is the failure that matters.
+      ORDER BY e.id, abs(i.air_date - e.air_date), i.air_date DESC
+    ),
     cleared AS (
-      UPDATE episodes e SET airs_at_source = NULL
+      UPDATE episodes e
+      SET airs_at_source = NULL,
+          airs_at = CASE WHEN e.air_date IS NULL THEN NULL ELSE e.airs_at END
       WHERE e.show_tmdb_id = ${showTmdbId} AND e.airs_at_source IN (${sources})
-        AND NOT EXISTS (SELECT 1 FROM incoming i WHERE i.season = e.season AND i.number = e.number)
+        AND NOT EXISTS (SELECT 1 FROM accepted a WHERE a.id = e.id)
     )
     UPDATE episodes e
-    SET airs_at = i.airs_at, airs_at_source = i.source
-    FROM incoming i
-    WHERE e.show_tmdb_id = ${showTmdbId} AND e.season = i.season AND e.number = i.number
+    SET airs_at = a.airs_at, airs_at_source = a.source
+    FROM accepted a
+    WHERE e.id = a.id
   `
 }
 
