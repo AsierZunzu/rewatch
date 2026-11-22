@@ -1,5 +1,10 @@
 # Single-container image: API + built frontend served by the same process.
-FROM node:26-bookworm-slim AS build
+
+# The build stage runs on the build machine's own platform, not the target's.
+# Its output (generated client, compiled JS, frontend bundle) is the same on
+# every architecture, and under QEMU emulation Node 26 breaks `prisma generate`
+# ("Unable to parse JSON ... [Context: getDmmf]") on the arm64 image.
+FROM --platform=$BUILDPLATFORM node:26-bookworm-slim AS build
 WORKDIR /app
 # prisma.config.ts resolves DATABASE_URL even for `generate` — any value works at build time.
 ENV DATABASE_URL=postgresql://build:build@localhost:5432/build
@@ -14,19 +19,30 @@ RUN cd frontend && npm ci
 COPY frontend frontend
 RUN cd frontend && npm run build
 
-FROM node:26-bookworm-slim
-WORKDIR /app/backend
-ENV NODE_ENV=production HOST=0.0.0.0 PORT=3020 STATIC_DIR=/app/frontend/dist
-
 # The prisma CLI's schema engine (`migrate deploy` at startup) needs libssl. The
 # slim image ships none, so Prisma guesses openssl-1.1.x and warns on every start.
+# The install below needs it too: Prisma picks the engine variant to download
+# from the openssl it finds, and a 1.1.x engine makes the runtime try to fetch
+# the 3.0.x one into a read-only node_modules.
+FROM node:26-bookworm-slim AS base
 RUN apt-get update \
  && apt-get install -y --no-install-recommends openssl \
  && rm -rf /var/lib/apt/lists/*
 
+# node_modules, on the other hand, carry native code (argon2, the prisma schema
+# engine), so the runtime install happens on the target platform.
+FROM base AS deps
+WORKDIR /app/backend
+COPY backend/package.json backend/package-lock.json ./
+RUN npm ci
+
+FROM base
+WORKDIR /app/backend
+ENV NODE_ENV=production HOST=0.0.0.0 PORT=3020 STATIC_DIR=/app/frontend/dist
+
 # Full install kept on purpose: the prisma CLI is needed at startup for
 # `migrate deploy`, and it lives in devDependencies.
-COPY --from=build /app/backend/node_modules node_modules
+COPY --from=deps /app/backend/node_modules node_modules
 COPY --from=build /app/backend/dist dist
 COPY --from=build /app/backend/src/generated src/generated
 COPY backend/package.json backend/prisma.config.ts ./
