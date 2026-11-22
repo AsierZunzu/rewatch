@@ -1,5 +1,5 @@
 # Publishes the container image to GHCR on every push to master
-# (:latest + :sha) and on version tags (:vX.Y.Z).
+# (:latest + :sha) and on version tags (:vX.Y.Z), once the test suite passes.
 name: docker
 
 on:
@@ -13,7 +13,11 @@ permissions:
   packages: write
 
 jobs:
+  test:
+    uses: ./.github/workflows/test.yml
+
   publish:
+    needs: test
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v7

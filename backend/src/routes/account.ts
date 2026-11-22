@@ -116,7 +116,7 @@ export default async function accountRoutes(app: FastifyInstance) {
         return reply.code(401).send({ error: 'invalid_credentials' })
       }
 
-      const [events, follows, ratings, watchlist, pending, jobs] = await prisma.$transaction([
+      const [events, follows, ratings, favorites, watchlist, pending, jobs] = await prisma.$transaction([
         prisma.watchEvent.deleteMany({ where: { userId } }),
         prisma.follow.deleteMany({ where: { userId } }),
         prisma.rating.deleteMany({ where: { userId } }),
@@ -131,6 +131,7 @@ export default async function accountRoutes(app: FastifyInstance) {
           watchEvents: events.count,
           follows: follows.count,
           ratings: ratings.count,
+          favorites: favorites.count,
           movieWatchlist: watchlist.count,
           pendingMovies: pending.count,
           importJobs: jobs.count,

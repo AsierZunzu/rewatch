@@ -1,5 +1,5 @@
-# Production deploy: every push to master triggers a deploy service on the
-# host over SSH. Server-side, the key is restricted (authorized_keys command=)
+# Production deploy: every push to master that passes the test suite triggers
+# a deploy service on the host over SSH. Server-side, the key is restricted (authorized_keys command=)
 # to a single trigger script, so this workflow cannot run anything else.
 #
 # Required repository secrets (deploys are skipped when they are absent,
@@ -20,7 +20,12 @@ concurrency:
   cancel-in-progress: false
 
 jobs:
+  test:
+    if: ${{ vars.DEPLOY_ENABLED == 'true' }}
+    uses: ./.github/workflows/test.yml
+
   deploy:
+    needs: test
     runs-on: ubuntu-latest
     if: ${{ vars.DEPLOY_ENABLED == 'true' }}
     steps:
