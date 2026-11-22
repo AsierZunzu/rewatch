@@ -26,7 +26,7 @@
     "nodemailer": "^10.1.7",
     "openid-client": "^6.9.1",
     "web-push": "^3.6.7",
-    "zod": "^4.4.3"
+    "zod": "^4.6.6"
   },
   "devDependencies": {
     "@types/node": "^26.1.0",
