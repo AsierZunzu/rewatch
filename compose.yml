@@ -38,6 +38,8 @@ services:
     # To build from source instead:
     # build: .
     restart: unless-stopped
+    # Runs as an unprivileged user; set PUID/PGID to pick a different one.
+    user: '${PUID:-1000}:${PGID:-1000}'
     depends_on:
       db:
         condition: service_healthy
