@@ -83,24 +83,41 @@ function externalIds(ids: { tvdb_id: number | null; imdb_id: string | null }) {
 describe('tvmaze.getShowAirTimes', () => {
   const show = { id: 9, schedule: { time: '20:00' }, network: { country: { timezone: 'Europe/London' } } }
 
-  it('collects instants by season and number, skipping unusable episodes', async () => {
+  it('collects instants by local air date, skipping unusable episodes', async () => {
     externalIds({ tvdb_id: 100, imdb_id: null })
     routes.push((url) => {
       if (url.pathname === '/lookup/shows') return json(show)
       if (url.pathname === '/shows/9/episodes')
         return json([
-          { season: 1, number: 1, airstamp: '2025-01-05T20:00:00+00:00' },
-          { season: 1, number: 2, airstamp: 'garbage' },
-          { season: 0, number: null, airstamp: '2025-01-19T20:00:00+00:00' }, // unnumbered special
-          { season: 1, number: 3, airstamp: null },
+          { season: 1, number: 1, airdate: '2025-01-05', airstamp: '2025-01-05T20:00:00+00:00' },
+          { season: 1, number: 2, airdate: '2025-01-12', airstamp: 'garbage' },
+          // Unnumbered, but dated — the date is all the match needs now.
+          { season: 0, number: null, airdate: '2025-01-19', airstamp: '2025-01-19T20:00:00+00:00' },
+          { season: 1, number: 3, airdate: '2025-01-26', airstamp: null },
+          { season: 1, number: 4, airdate: null, airstamp: '2025-02-02T20:00:00+00:00' },
         ])
       return undefined
     })
     expect(await tvmaze.getShowAirTimes(1)).toEqual({
       airs: { time: '20:00', timezone: 'Europe/London' },
-      firstAired: new Map([['1:1', new Date('2025-01-05T20:00:00Z')]]),
+      instantsByDate: new Map([
+        ['2025-01-05', new Date('2025-01-05T20:00:00Z')],
+        ['2025-01-19', new Date('2025-01-19T20:00:00Z')],
+      ]),
     })
     expect(requests.some((r) => r.url.searchParams.get('specials') === '1')).toBe(true)
+  })
+
+  it("files an instant under TVmaze's airdate, not the UTC day of its airstamp", async () => {
+    externalIds({ tvdb_id: 100, imdb_id: null })
+    routes.push((url) => {
+      if (url.pathname === '/lookup/shows') return json(show)
+      // A late-evening broadcast west of UTC: the airstamp is already the next UTC day.
+      if (url.pathname === '/shows/9/episodes')
+        return json([{ season: 1, number: 1, airdate: '2025-01-05', airstamp: '2025-01-06T02:00:00+00:00' }])
+      return undefined
+    })
+    expect((await tvmaze.getShowAirTimes(1))!.instantsByDate).toEqual(new Map([['2025-01-05', new Date('2025-01-06T02:00:00Z')]]))
   })
 
   it('falls back to the IMDb id when TheTVDB lookup misses', async () => {
@@ -108,7 +125,7 @@ describe('tvmaze.getShowAirTimes', () => {
     routes.push((url) => (url.pathname === '/lookup/shows' && url.searchParams.get('imdb') === 'tt123' ? json({ ...show, network: null, webChannel: null }) : undefined))
     routes.push((url) => (url.pathname === '/shows/9/episodes' ? json([]) : undefined))
     // A global streamer has no country, hence no slot.
-    expect(await tvmaze.getShowAirTimes(1)).toEqual({ airs: null, firstAired: new Map() })
+    expect(await tvmaze.getShowAirTimes(1)).toEqual({ airs: null, instantsByDate: new Map() })
   })
 
   it('is null when TMDB has no id to look it up by, when TVmaze 404s, or on an outage', async () => {
@@ -151,7 +168,7 @@ describe('trakt.getShowAirTimes', () => {
     expect(requests).toEqual([])
   })
 
-  it('collects first_aired by season and number, and sends the API headers', async () => {
+  it("collects first_aired by the show's local air date, and sends the API headers", async () => {
     routes.push((url) => {
       if (url.pathname === '/search/tmdb/1') return json([{ show: { ids: { trakt: 7 }, airs: { time: '21:00', timezone: 'America/New_York' } } }])
       if (url.pathname === '/shows/7/seasons')
@@ -168,7 +185,8 @@ describe('trakt.getShowAirTimes', () => {
     })
     expect(await trakt.getShowAirTimes(1)).toEqual({
       airs: { time: '21:00', timezone: 'America/New_York' },
-      firstAired: new Map([['1:1', new Date('2025-01-06T02:00:00Z')]]),
+      // 02:00Z on the 6th is 21:00 on the 5th in New York.
+      instantsByDate: new Map([['2025-01-05', new Date('2025-01-06T02:00:00Z')]]),
     })
     const headers = requests[0]!.init!.headers as Record<string, string>
     expect(headers['trakt-api-key']).toBe('client-id')
