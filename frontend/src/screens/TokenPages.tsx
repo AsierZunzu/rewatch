@@ -19,22 +19,18 @@ function Shell({ children }: { children: React.ReactNode }) {
 export function Verify() {
   const { t } = useTranslation()
   const [params] = useSearchParams()
-  const [state, setState] = useState<'pending' | 'ok' | 'ko'>('pending')
+  const token = params.get('token')
+  const [state, setState] = useState<'pending' | 'ok' | 'ko'>(token ? 'pending' : 'ko')
   const ran = useRef(false)
 
   useEffect(() => {
-    if (ran.current) return // StrictMode double-run: the token is single-use
+    if (!token || ran.current) return // StrictMode double-run: the token is single-use
     ran.current = true
-    const token = params.get('token')
-    if (!token) {
-      setState('ko')
-      return
-    }
     api
       .post('/api/auth/verify', { token })
       .then(() => setState('ok'))
       .catch(() => setState('ko'))
-  }, [params])
+  }, [token])
 
   return (
     <Shell>

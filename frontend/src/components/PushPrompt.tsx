@@ -12,18 +12,14 @@ const DISMISSED_KEY = 'rewatch-push-prompt-dismissed'
 export default function PushPrompt() {
   const { t } = useTranslation()
   const navigate = useNavigate()
-  const [visible, setVisible] = useState(false)
-  const [busy, setBusy] = useState(false)
   // iOS only supports push from the installed app: there, the prompt becomes
   // an invitation to install first.
   const needsInstall = !pushSupported() && detectPlatform() === 'ios' && !isStandalone()
+  const [visible, setVisible] = useState(() => needsInstall && !localStorage.getItem(DISMISSED_KEY))
+  const [busy, setBusy] = useState(false)
 
   useEffect(() => {
-    if (localStorage.getItem(DISMISSED_KEY)) return
-    if (!pushSupported()) {
-      if (detectPlatform() === 'ios' && !isStandalone()) setVisible(true)
-      return
-    }
+    if (localStorage.getItem(DISMISSED_KEY) || !pushSupported()) return
     if (Notification.permission !== 'default') return // already granted or denied
     getCurrentSubscription().then((sub) => {
       if (!sub) setVisible(true)

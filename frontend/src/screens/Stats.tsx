@@ -1,3 +1,4 @@
+import { useState } from 'react'
 import { Link } from 'react-router-dom'
 import { useTranslation } from 'react-i18next'
 import { useHighlights, useStats } from '../api/hooks'
@@ -12,6 +13,7 @@ export default function Stats() {
   const { t, i18n } = useTranslation()
   const { data, isLoading } = useStats()
   const { data: highlights } = useHighlights()
+  const [now] = useState(() => new Date())
   if (isLoading || !data) return <Spinner />
 
   const numberLocale = INTL_LOCALE[toLang(i18n.language)]
@@ -19,7 +21,6 @@ export default function Stats() {
   const hours = Math.round(data.totalMinutes / 60)
 
   // Last 12 months, gaps filled with 0, current month highlighted.
-  const now = new Date()
   const months = Array.from({ length: 12 }, (_, i) => {
     const d = new Date(now.getFullYear(), now.getMonth() - 11 + i, 1)
     const key = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`

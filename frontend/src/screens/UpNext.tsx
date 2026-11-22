@@ -205,14 +205,18 @@ export default function UpNext() {
   // The API sorts by latest activity, but the order is frozen while the screen
   // is open: checking an episode must not reorder the list under the finger.
   // A fresh sort applies on the next visit to the tab.
-  const orderRef = useRef(new Map<number, number>())
-  const shows = useMemo(() => {
-    const order = orderRef.current
-    for (const s of data?.shows ?? []) {
-      if (!order.has(s.show.tmdbId)) order.set(s.show.tmdbId, order.size)
+  const [order, setOrder] = useState(() => new Map<number, number>())
+  if (data?.shows.some((s) => !order.has(s.show.tmdbId))) {
+    const next = new Map(order)
+    for (const s of data.shows) {
+      if (!next.has(s.show.tmdbId)) next.set(s.show.tmdbId, next.size)
     }
-    return [...(data?.shows ?? [])].sort((a, b) => order.get(a.show.tmdbId)! - order.get(b.show.tmdbId)!)
-  }, [data])
+    setOrder(next)
+  }
+  const shows = useMemo(
+    () => [...(data?.shows ?? [])].sort((a, b) => order.get(a.show.tmdbId)! - order.get(b.show.tmdbId)!),
+    [data, order],
+  )
 
   const query = normalize(filter.trim())
   const filteredShows = query ? shows.filter((s) => normalize(s.show.name).includes(query)) : shows
