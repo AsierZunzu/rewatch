@@ -1,0 +1,76 @@
+# Runs both test suites on every pull request, and gates the docker and deploy
+# workflows, which call it (workflow_call) as a job they `need` -- so pushes to
+# master are tested there rather than by a trigger of their own here.
+#
+# Compiling is build.yml's job; this one only runs the suites (and the frontend
+# lint, which nothing else runs).
+#
+# The backend integration tests need a real Postgres: they run against the
+# service container below, which the suite migrates and truncates as it goes.
+name: test
+
+on:
+  pull_request:
+  workflow_call:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  # When called, `github.workflow` is the caller's name: docker and deploy each
+  # get their own group instead of cancelling each other's test run.
+  group: test-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  backend-tests:
+    runs-on: ubuntu-latest
+    services:
+      postgres:
+        image: postgres:17-alpine
+        env:
+          POSTGRES_USER: rewatch
+          POSTGRES_PASSWORD: rewatch
+          POSTGRES_DB: rewatch_test
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U rewatch -d rewatch_test"
+          --health-interval 2s
+          --health-timeout 3s
+          --health-retries 15
+    env:
+      TEST_DATABASE_URL: postgresql://rewatch:rewatch@localhost:5432/rewatch_test
+      # prisma.config.ts resolves it even for `generate`.
+      DATABASE_URL: postgresql://rewatch:rewatch@localhost:5432/rewatch_test
+    defaults:
+      run:
+        working-directory: backend
+    steps:
+      - uses: actions/checkout@v7
+      # Matches the node:22 base image in the Dockerfile.
+      - uses: actions/setup-node@v7
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: backend/package-lock.json
+      - run: npm ci
+      - run: npx prisma generate
+      - run: npm test
+
+  frontend-tests:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: frontend
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-node@v7
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: frontend/package-lock.json
+      - run: npm ci
+      - run: npm run lint
+      - run: npm test

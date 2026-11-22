@@ -140,6 +140,25 @@ TV Time shut down in July 2026 and offered a GDPR self-service export until the 
 
 React 19 + Vite + Tailwind 4 (PWA with a custom service worker) · Fastify 5 + Prisma 7 · PostgreSQL.
 
+## Tests
+
+Both packages use [Vitest](https://vitest.dev). CI runs everything on each pull request ([`.github/workflows/test.yml`](.github/workflows/test.yml)).
+
+```bash
+# Backend: unit tests need nothing; integration tests run the real API against
+# a throwaway Postgres (port 55433, every table is truncated between tests).
+cd backend
+npm run test:db             # docker compose -f docker-compose.test.yml up
+npx prisma generate
+npm test                    # or: npm run test:unit / npm run test:integration
+
+# Frontend: jsdom, no server needed
+cd ../frontend
+npm test
+```
+
+Point `TEST_DATABASE_URL` at another Postgres if you'd rather not use Docker. Its database name must contain `test`, as a guard against wiping a real instance. External services (TMDB, TVmaze, Trakt, SMTP, Web Push) are always faked, so the suite never touches the network.
+
 ## License
 
 [AGPL-3.0](LICENSE). If you run a modified version as a service, you must publish your changes.
