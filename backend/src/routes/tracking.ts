@@ -7,6 +7,10 @@ import { getMovieCached, getShowCached } from '../lib/catalog.js'
 import { FollowState } from '../generated/prisma/client.js'
 
 const idParam = z.object({ id: z.coerce.number().int().positive() })
+
+// Unwatching defaults to clearing the title, which is what the checkbox surfaces
+// mean. `last` is for the rewatch counter: it undoes one viewing, not the history.
+const scopeQuery = z.object({ scope: z.enum(['all', 'last']).default('all') })
 const followBody = z.object({
   state: z.enum(FollowState).optional(),
 })
@@ -195,14 +199,30 @@ export default async function trackingRoutes(app: FastifyInstance) {
     return { ok: true }
   })
 
+  // `?scope=last` drops only the most recent viewing, which is what undoing a
+  // rewatch means; the default clears the film outright. Trakt is only told the
+  // film is unwatched once nothing is left, since removing it there while two
+  // viewings remain here would be a lie the next sync propagates back.
   app.delete('/api/movies/:id/watch', { preHandler: app.requireAuth }, async (request, reply) => {
     const params = idParam.safeParse(request.params)
-    if (!params.success) return reply.code(400).send({ error: 'invalid_id' })
-    const deleted = await prisma.watchEvent.deleteMany({
-      where: { userId: request.user!.id, movieId: params.data.id },
-    })
-    if (deleted.count > 0) mirrorToTrakt(request.user!.id, 'remove', { kind: 'movie', movieTmdbId: params.data.id })
-    return { ok: true }
+    const query = scopeQuery.safeParse(request.query ?? {})
+    if (!params.success || !query.success) return reply.code(400).send({ error: 'invalid_input' })
+    const userId = request.user!.id
+    const where = { userId, movieId: params.data.id }
+
+    let deleted = 0
+    if (query.data.scope === 'last') {
+      const latest = await prisma.watchEvent.findFirst({ where, orderBy: { watchedAt: 'desc' }, select: { id: true } })
+      if (latest) deleted = (await prisma.watchEvent.deleteMany({ where: { id: latest.id } })).count
+    } else {
+      deleted = (await prisma.watchEvent.deleteMany({ where })).count
+    }
+
+    const remaining = deleted > 0 ? await prisma.watchEvent.count({ where }) : 0
+    if (deleted > 0 && remaining === 0) {
+      mirrorToTrakt(userId, 'remove', { kind: 'movie', movieTmdbId: params.data.id })
+    }
+    return { ok: true, deleted, remaining }
   })
 
   app.put('/api/movies/:id/watchlist', { preHandler: app.requireAuth }, async (request, reply) => {

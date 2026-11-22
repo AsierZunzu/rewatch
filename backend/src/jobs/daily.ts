@@ -60,6 +60,15 @@ async function purgeExpiredTokens() {
 const AIR_TIME_TTL_MS = 7 * 24 * 60 * 60 * 1000
 const AIR_TIME_BATCH = 50
 
+// TVmaze allows anonymous callers roughly 20 requests per 10 seconds per IP, and
+// each show here costs two or three of them. Unpaced, this loop spends the whole
+// budget in its first seconds and takes 429s for the rest of the batch — and a
+// show whose TVmaze lookup is refused still gets stamped as enriched when Trakt
+// answered, so it would then sit on AIR_TIME_TTL_MS before being asked again.
+// Nothing in a nightly job is in a hurry: 50 shows spaced this way cost about
+// half a minute more.
+const AIR_TIME_SPACING_MS = 700
+
 async function refreshAirTimes(log: JobLog) {
   const { syncShowAirTimes } = await import('../lib/catalog.js')
   const shows = await prisma.show.findMany({
@@ -74,7 +83,8 @@ async function refreshAirTimes(log: JobLog) {
     select: { tmdbId: true },
   })
   let done = 0
-  for (const show of shows) {
+  for (const [i, show] of shows.entries()) {
+    if (i > 0) await new Promise((resolve) => setTimeout(resolve, AIR_TIME_SPACING_MS))
     try {
       await syncShowAirTimes(show.tmdbId)
       done++

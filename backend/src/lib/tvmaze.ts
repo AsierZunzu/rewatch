@@ -19,6 +19,20 @@ const BASE = process.env.TVMAZE_API_URL || 'https://api.tvmaze.com'
 // momentary limit would leave it on the coarse fallback for a week.
 const RETRY_AFTER_MS = 2_000
 
+// A 429 usually carries `Retry-After`, in seconds. Honour it: retrying sooner
+// than the server asked just spends the one retry we have. Cap it all the same,
+// because this also runs inside a show-page request, where a caller that never
+// returns is worse than a show that stays on the fallback.
+const MAX_RETRY_AFTER_MS = 10_000
+
+function retryDelay(res: Response) {
+  // Missing, empty, or an HTTP-date rather than a count of seconds: all land on
+  // NaN or 0 here, and all mean "we were not told", so fall back to the guess.
+  const seconds = Number(res.headers.get('retry-after'))
+  if (!Number.isFinite(seconds) || seconds <= 0) return RETRY_AFTER_MS
+  return Math.min(seconds * 1000, MAX_RETRY_AFTER_MS)
+}
+
 type TvmazeCountry = { timezone?: string | null } | null
 
 type TvmazeShow = {
@@ -41,7 +55,7 @@ async function api<T>(path: string, retry = true): Promise<T | null> {
   })
   if (res.status === 404) return null
   if (res.status === 429 && retry) {
-    await new Promise((resolve) => setTimeout(resolve, RETRY_AFTER_MS))
+    await new Promise((resolve) => setTimeout(resolve, retryDelay(res)))
     return api<T>(path, false)
   }
   if (!res.ok) throw new Error(`TVmaze ${res.status} on ${path}`)

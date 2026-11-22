@@ -16,12 +16,22 @@ export async function getCurrentSubscription(): Promise<PushSubscription | null>
   return reg.pushManager.getSubscription()
 }
 
-/** Requests permission, subscribes and registers server-side. */
+/**
+ * Requests permission, subscribes and registers server-side.
+ *
+ * Throws `permission_denied` only when the browser actually refused. Every
+ * other failure carries its own reason, because they are not the user's to fix:
+ * telling someone to check their site permissions when the instance simply has
+ * no VAPID keys sends them looking in the wrong place entirely.
+ */
 export async function subscribeToPush(): Promise<void> {
   const permission = await Notification.requestPermission()
   if (permission !== 'granted') throw new Error('permission_denied')
 
   const { key } = await api.get<{ key: string }>('/api/push/vapid-key')
+  // The endpoint 503s when nothing is configured, so an empty key here means it
+  // answered with one it does not have. Say so rather than letting atob() throw.
+  if (!key) throw new Error('push_not_configured')
   const reg = await navigator.serviceWorker.ready
   const subscription = await reg.pushManager.subscribe({
     userVisibleOnly: true,
