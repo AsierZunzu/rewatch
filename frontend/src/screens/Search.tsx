@@ -1,5 +1,5 @@
 import { useState } from 'react'
-import { Link } from 'react-router-dom'
+import { Link, useSearchParams } from 'react-router-dom'
 import { useTranslation } from 'react-i18next'
 import { useHighlights, useLibrary, useSearch, useTracking, useWatched, useWatchlist } from '../api/hooks'
 import { Poster } from '../components/Poster'
@@ -84,6 +84,7 @@ function ResultCard({
 }
 
 type LibraryFilter = 'ALL' | 'WATCHING' | 'FOR_LATER' | 'ARCHIVED' | 'WATCHED' | 'FAVORITES'
+const LIBRARY_FILTERS: LibraryFilter[] = ['ALL', 'WATCHING', 'FOR_LATER', 'ARCHIVED', 'WATCHED', 'FAVORITES']
 
 function PosterGrid({
   title,
@@ -114,8 +115,28 @@ const movieItems = (movies: { tmdbId: number; title: string; posterPath: string 
 export default function Search() {
   const { t } = useTranslation()
   const [q, setQ] = useState('')
-  const [filter, setFilter] = useState<LibraryFilter>('ALL')
-  const [typeTab, setTypeTab] = useState<'shows' | 'movies'>('shows')
+  // The library filter and type tab live in the URL so they survive opening a
+  // title and navigating back.
+  const [params, setParams] = useSearchParams()
+  const filterParam = params.get('filter') as LibraryFilter | null
+  const filter: LibraryFilter = filterParam && LIBRARY_FILTERS.includes(filterParam) ? filterParam : 'ALL'
+  const typeTab: 'shows' | 'movies' = params.get('type') === 'movies' ? 'movies' : 'shows'
+  const setView = (next: { filter?: LibraryFilter; type?: 'shows' | 'movies' }) =>
+    setParams(
+      (prev) => {
+        const p = new URLSearchParams(prev)
+        if (next.filter) {
+          if (next.filter === 'ALL') p.delete('filter')
+          else p.set('filter', next.filter)
+        }
+        if (next.type) {
+          if (next.type === 'shows') p.delete('type')
+          else p.set('type', next.type)
+        }
+        return p
+      },
+      { replace: true },
+    )
   const search = useSearch(q)
   const library = useLibrary()
   const { data: watchlist } = useWatchlist()
@@ -223,8 +244,7 @@ export default function Search() {
                     key={key}
                     type="button"
                     onClick={() => {
-                      setFilter(key)
-                      setTypeTab('shows')
+                      setView({ filter: key, type: 'shows' })
                     }}
                     className={`flex-none rounded-full border px-3.5 py-1.5 text-[12px] font-extrabold transition-colors ${
                       filter === key ? 'border-accent bg-accent text-ink' : 'text-muted border-border bg-transparent'
@@ -242,7 +262,7 @@ export default function Search() {
                 <button
                   key={key}
                   type="button"
-                  onClick={() => setTypeTab(key)}
+                  onClick={() => setView({ type: key })}
                   className={`flex-none rounded-full border px-3.5 py-1.5 text-[12px] font-extrabold transition-colors ${
                     typeTab === key ? 'border-accent bg-accent text-ink' : 'text-muted border-border bg-transparent'
                   }`}
