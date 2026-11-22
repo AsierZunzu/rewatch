@@ -21,11 +21,25 @@ export const SETTING_KEYS = [
   'LEGAL_CONTACT',
   'TRAKT_CLIENT_ID',
   'TRAKT_CLIENT_SECRET',
+  'OIDC_ISSUER',
+  'OIDC_CLIENT_ID',
+  'OIDC_CLIENT_SECRET',
+  'OIDC_BUTTON_LABEL',
+  'OIDC_SCOPES',
+  'OIDC_SKIP_EMAIL_VERIFIED',
+  'OIDC_AUTO_REGISTER',
+  'PASSWORD_LOGIN_ENABLED',
 ] as const
 export type SettingKey = (typeof SETTING_KEYS)[number]
 
 // Never returned to the client, even to admins — only a "set" flag is.
-export const SECRET_KEYS: readonly SettingKey[] = ['TMDB_API_TOKEN', 'SMTP_PASS', 'VAPID_PRIVATE_KEY', 'TRAKT_CLIENT_SECRET']
+export const SECRET_KEYS: readonly SettingKey[] = [
+  'TMDB_API_TOKEN',
+  'SMTP_PASS',
+  'VAPID_PRIVATE_KEY',
+  'TRAKT_CLIENT_SECRET',
+  'OIDC_CLIENT_SECRET',
+]
 
 const cache = new Map<string, string>()
 const listeners: Array<() => void> = []

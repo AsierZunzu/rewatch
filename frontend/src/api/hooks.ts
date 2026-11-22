@@ -4,6 +4,7 @@ import type {
   AdminOverview,
   AdminSetting,
   AdminUsersPage,
+  AuthMethods,
   AdminUsersQuery,
   CalendarEpisode,
   ImportJob,
@@ -94,6 +95,14 @@ export const useLegalInfo = () =>
     queryKey: ['legal-info'],
     queryFn: () => api.get<{ host: string | null; contact: string | null }>('/api/legal-info'),
     staleTime: Infinity,
+  })
+
+// Which sign-in options the login screen offers (password form, SSO button).
+export const useAuthMethods = () =>
+  useQuery({
+    queryKey: ['auth-methods'],
+    queryFn: () => api.get<AuthMethods>('/api/auth/methods'),
+    staleTime: 5 * 60 * 1000,
   })
 
 export const useAdminSettings = () =>

@@ -248,7 +248,13 @@
     "theme_light": "Clair",
     "theme_system": "Auto",
     "calendarFeedRow": "Flux calendrier",
-    "calendarFeedRowHint": "Suivre les prochains épisodes depuis une appli agenda"
+    "calendarFeedRowHint": "Suivre les prochains épisodes depuis une appli agenda",
+    "setPassword": "Définir un mot de passe",
+    "purgeUsername": "Tapez votre nom d'utilisateur ({{username}})",
+    "ssoRow": "Connexion avec {{provider}}",
+    "ssoLink": "Lier",
+    "ssoUnlink": "Délier",
+    "ssoLinked": "Lié"
   },
   "resolve": {
     "title": "À résoudre",
@@ -286,7 +292,18 @@
     "tooManyAttempts": "Trop de tentatives — réessayez dans une minute",
     "validationHint": "Pseudo 3-30 caractères (lettres, chiffres, _ . -), email valide, mot de passe 8 caractères minimum",
     "passwordMismatch": "Les mots de passe ne correspondent pas",
-    "registrationClosed": "Les inscriptions sont fermées sur cette instance"
+    "registrationClosed": "Les inscriptions sont fermées sur cette instance",
+    "continueWith": "Continuer avec {{provider}}",
+    "or": "ou",
+    "passwordLoginDisabled": "La connexion par mot de passe est désactivée sur cette instance",
+    "oidcError": {
+      "oidc_failed": "L'authentification unique a échoué. Réessayez.",
+      "oidc_cancelled": "Connexion annulée.",
+      "oidc_disabled": "L'authentification unique n'est pas configurée sur cette instance.",
+      "oidc_email_unverified": "Un compte existe déjà avec cet email, mais votre fournisseur n'a pas vérifié l'adresse. Connectez-vous avec votre mot de passe et liez-le depuis votre profil.",
+      "oidc_already_linked": "Cette identité est déjà liée à un autre compte.",
+      "registration_closed": "Aucun compte ne correspond à cette identité et les inscriptions sont fermées."
+    }
   },
   "tokens": {
     "verifying": "Vérification en cours…",
@@ -424,7 +441,23 @@
     "groupTrakt": "Trakt",
     "traktClientId": "client id",
     "traktClientSecret": "client secret",
-    "traktHelp": "Optionnel. Permet aux utilisateurs de se synchroniser avec Trakt.tv : crée une app API (gratuite) sur trakt.tv/oauth/applications avec l'uri de redirection urn:ietf:wg:oauth:2.0:oob."
+    "traktHelp": "Optionnel. Permet aux utilisateurs de se synchroniser avec Trakt.tv : crée une app API (gratuite) sur trakt.tv/oauth/applications avec l'uri de redirection urn:ietf:wg:oauth:2.0:oob.",
+    "groupOidc": "Authentification unique (OIDC)",
+    "oidc": {
+      "help": "Optionnel. Déclarez un client confidentiel sur votre fournisseur d'identité (Authelia, Authentik, Keycloak, Pocket ID…) avec l'URI de redirection ci-dessous.",
+      "redirectUri": "URI de redirection",
+      "OIDC_ISSUER": "URL de l'émetteur",
+      "OIDC_CLIENT_ID": "Client ID",
+      "OIDC_CLIENT_SECRET": "Client secret",
+      "OIDC_BUTTON_LABEL": "Libellé du bouton",
+      "OIDC_SCOPES": "Scopes",
+      "OIDC_AUTO_REGISTER": "Créer les comptes à la première connexion",
+      "OIDC_AUTO_REGISTER_HINT": "fermé si les inscriptions sont désactivées",
+      "OIDC_SKIP_EMAIL_VERIFIED": "Faire confiance aux emails non vérifiés",
+      "OIDC_SKIP_EMAIL_VERIFIED_HINT": "lier par email même sans email_verified",
+      "PASSWORD_LOGIN_ENABLED": "Connexion par mot de passe",
+      "PASSWORD_LOGIN_ENABLED_HINT": "off = SSO uniquement"
+    }
   },
   "tvhelp": {
     "title": "Récupérer ses données TV Time",

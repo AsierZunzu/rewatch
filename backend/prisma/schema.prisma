@@ -23,7 +23,8 @@ model User {
   isAdmin         Boolean   @default(false) @map("is_admin")
   // "Verify your email" reminder sent one day before lockout (keeps the daily job from sending duplicates).
   verifyReminderSentAt DateTime? @map("verify_reminder_sent_at")
-  passwordHash    String    @map("password_hash")
+  // Null for accounts created through OIDC that never set a password.
+  passwordHash    String?   @map("password_hash")
   // Opaque token for the read-only .ics feed, null until the user asks for one.
   // Stored in clear unlike session tokens: a feed URL has to stay copyable, and
   // it only exposes air dates of followed shows. Rotating it kills the old URL.
@@ -40,6 +41,7 @@ model User {
   favorites     Favorite[]
   pushSubscriptions PushSubscription[]
   traktAccount  TraktAccount?
+  oidcIdentity  OidcIdentity?
 
   @@map("users")
 }
@@ -60,6 +62,20 @@ model TraktAccount {
   user User @relation(fields: [userId], references: [id], onDelete: Cascade)
 
   @@map("trakt_accounts")
+}
+
+// Link between a local account and the instance's OIDC provider. Matched on
+// (issuer, subject), never on email: the IdP may let users change their email.
+model OidcIdentity {
+  userId    Int      @id @map("user_id") // one provider per instance ⇒ one identity per user
+  issuer    String
+  subject   String
+  createdAt DateTime @default(now()) @map("created_at")
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([issuer, subject])
+  @@map("oidc_identities")
 }
 
 model Session {

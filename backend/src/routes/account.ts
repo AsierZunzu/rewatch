@@ -6,6 +6,16 @@ import { prisma } from '../lib/prisma.js'
 import { localizeMovies, localizeShows } from '../lib/catalog.js'
 import { SESSION_COOKIE } from '../lib/session.js'
 
+// Re-confirmation for irreversible actions. The password when there is one;
+// SSO-only accounts type their username instead (re-running the IdP round-trip
+// here would be more ceremony than these two buttons deserve).
+const confirmSchema = z.object({ password: z.string().min(1).optional(), confirm: z.string().min(1).optional() })
+
+async function confirmed(user: { username: string; passwordHash: string | null }, body: z.infer<typeof confirmSchema>) {
+  if (user.passwordHash) return !!body.password && (await argon2.verify(user.passwordHash, body.password))
+  return body.confirm === user.username
+}
+
 export default async function accountRoutes(app: FastifyInstance) {
   // Full export of the user's tracking data as a portable JSON file.
   // TMDB ids make it reimportable anywhere (including a future Rewatch import).
@@ -92,17 +102,17 @@ export default async function accountRoutes(app: FastifyInstance) {
   })
 
   // Purges ALL of the user's tracking history (the account itself remains).
-  // Strong confirmation: password required. Irreversible.
+  // Strong confirmation: password (or username for SSO accounts). Irreversible.
   app.delete(
     '/api/account/history',
     { preHandler: app.requireAuth, config: { rateLimit: { max: 3, timeWindow: '1 minute' } } },
     async (request, reply) => {
-      const body = z.object({ password: z.string().min(1) }).safeParse(request.body)
+      const body = confirmSchema.safeParse(request.body)
       if (!body.success) return reply.code(400).send({ error: 'invalid_input' })
 
       const userId = request.user!.id
       const user = await prisma.user.findUniqueOrThrow({ where: { id: userId } })
-      if (!(await argon2.verify(user.passwordHash, body.data.password))) {
+      if (!(await confirmed(user, body.data))) {
         return reply.code(401).send({ error: 'invalid_credentials' })
       }
 
@@ -136,13 +146,13 @@ export default async function accountRoutes(app: FastifyInstance) {
     '/api/account',
     { preHandler: app.requireAuth, config: { rateLimit: { max: 3, timeWindow: '1 minute' } } },
     async (request, reply) => {
-      const body = z.object({ password: z.string().min(1) }).safeParse(request.body)
+      const body = confirmSchema.safeParse(request.body)
       if (!body.success) return reply.code(400).send({ error: 'invalid_input' })
 
       const userId = request.user!.id
       const user = await prisma.user.findUniqueOrThrow({ where: { id: userId } })
       if (user.isAdmin) return reply.code(400).send({ error: 'cannot_delete_admin' })
-      if (!(await argon2.verify(user.passwordHash, body.data.password))) {
+      if (!(await confirmed(user, body.data))) {
         return reply.code(401).send({ error: 'invalid_credentials' })
       }
 
