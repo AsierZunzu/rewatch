@@ -18,6 +18,12 @@ FROM node:22-bookworm-slim
 WORKDIR /app/backend
 ENV NODE_ENV=production HOST=0.0.0.0 PORT=3020 STATIC_DIR=/app/frontend/dist
 
+# The prisma CLI's schema engine (`migrate deploy` at startup) needs libssl. The
+# slim image ships none, so Prisma guesses openssl-1.1.x and warns on every start.
+RUN apt-get update \
+ && apt-get install -y --no-install-recommends openssl \
+ && rm -rf /var/lib/apt/lists/*
+
 # Full install kept on purpose: the prisma CLI is needed at startup for
 # `migrate deploy`, and it lives in devDependencies.
 COPY --from=build /app/backend/node_modules node_modules
