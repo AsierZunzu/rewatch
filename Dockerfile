@@ -1,9 +1,9 @@
 # Single-container image: API + built frontend served by the same process.
-# The base image is pinned to a full version and digest on purpose: Dependabot
-# bumps both, so a Node patch release or a rebuilt Debian layer arrives as a PR,
-# and merging it republishes and redeploys the image. A floating tag like
-# node:26-slim never changes in the file, so nothing would ever rebuild.
-FROM node:26.13.1-slim@sha256:e6bedef217677b276c591795e169840edd9096dbf13f29df8ef8d1856b8820bc AS build
+# The base image is pinned to a full Node version on purpose: Dependabot bumps
+# it, so a Node release arrives as a PR, and merging it republishes and
+# redeploys the image. A floating tag like node:26-slim never changes in the
+# file, so nothing would ever rebuild.
+FROM node:26.13.1-slim AS build
 WORKDIR /app
 # prisma.config.ts resolves DATABASE_URL even for `generate` — any value works at build time.
 ENV DATABASE_URL=postgresql://build:build@localhost:5432/build
@@ -18,7 +18,7 @@ RUN cd frontend && npm ci
 COPY frontend frontend
 RUN cd frontend && npm run build
 
-FROM node:26.13.1-slim@sha256:e6bedef217677b276c591795e169840edd9096dbf13f29df8ef8d1856b8820bc
+FROM node:26.13.1-slim
 WORKDIR /app/backend
 ENV NODE_ENV=production HOST=0.0.0.0 PORT=3020 STATIC_DIR=/app/frontend/dist
 
