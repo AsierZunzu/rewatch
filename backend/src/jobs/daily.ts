@@ -111,6 +111,11 @@ const PUSH_T = {
     many: (n: number) => `${n} neue Folgen verfügbar`,
     more: (n: number) => `… und ${n} weitere`,
   },
+  es: {
+    one: 'Nuevo episodio disponible',
+    many: (n: number) => `${n} episodios nuevos disponibles`,
+    more: (n: number) => `… y ${n} más`,
+  },
 }
 
 // "New episode" push: episodes that have actually aired since the previous run,

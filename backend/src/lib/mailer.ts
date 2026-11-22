@@ -64,6 +64,16 @@ ${link}
 
 Der Link ist 7 Tage gültig. Falls du dich nicht registriert hast, ignoriere diese Nachricht einfach.`,
     }),
+    es: (username: string, link: string) => ({
+      subject: 'Rewatch — verifica tu dirección de correo',
+      text: `Hola ${username}:
+
+¡Bienvenido a Rewatch! Haz clic en este enlace para verificar tu dirección de correo:
+
+${link}
+
+El enlace es válido durante 7 días. Si no te has registrado, ignora este mensaje.`,
+    }),
   },
   verifyReminder: {
     fr: (username: string, link: string) => ({
@@ -93,6 +103,16 @@ ${link}`,
 kurze Erinnerung: deine E-Mail-Adresse ist noch nicht bestätigt, und dein Rewatch-Konto wird morgen gesperrt, wenn du das nicht nachholst. Die Sperre wird sofort aufgehoben, sobald du bestätigst, es geht nichts verloren.
 
 Hier klicken zum Bestätigen:
+
+${link}`,
+    }),
+    es: (username: string, link: string) => ({
+      subject: 'Rewatch — última oportunidad para verificar tu correo',
+      text: `Hola ${username}:
+
+Un recordatorio rápido: tu dirección de correo sigue sin verificar y tu cuenta de Rewatch se bloqueará mañana si no la verificas (se desbloquea en cuanto lo hagas, no se pierde nada).
+
+Haz clic aquí para verificarla:
 
 ${link}`,
     }),
@@ -127,6 +147,16 @@ jemand (hoffentlich du) hat angefragt, dein Rewatch-Passwort zurückzusetzen. Hi
 ${link}
 
 Der Link ist 1 Stunde gültig und kann nur einmal verwendet werden. Falls du das nicht angefragt hast, ignoriere diese Nachricht, dein Passwort bleibt unverändert.`,
+    }),
+    es: (username: string, link: string) => ({
+      subject: 'Rewatch — restablecer la contraseña',
+      text: `Hola ${username}:
+
+Alguien (esperamos que tú) ha pedido restablecer tu contraseña de Rewatch. Haz clic aquí:
+
+${link}
+
+El enlace es válido durante 1 hora y solo puede usarse una vez. Si no lo has pedido tú, ignora este mensaje: tu contraseña no cambia.`,
     }),
   },
 }

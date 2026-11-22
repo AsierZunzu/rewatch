@@ -6,7 +6,7 @@
 
 A self-hosted tracker for TV shows and movies. Built as a home for TV Time refugees: it imports your full TV Time GDPR export (watch history, followed shows, ratings, watchlist) and keeps the parts of the app that mattered, without the social clutter. It also syncs both ways with Trakt.tv.
 
-Installable PWA, multi-user, English and French, dark and light themes.
+Installable PWA, multi-user, English, French, German and Spanish, dark and light themes.
 
 **Demo instance**: https://rewatch.fr — registrations open while capacity holds. For anything long-term, self-host: it's one command (see below).
 
@@ -33,7 +33,7 @@ Installable PWA, multi-user, English and French, dark and light themes.
 - **Up next** list, release **calendar**, ratings and favorites
 - **Stats**: screen time, monthly activity, genres, top shows, your best-of
 - **Push notifications** the day an episode airs
-- **English and French**, per account — UI, emails, push messages and TMDB metadata
+- **English, French, German and Spanish**, per account — UI, emails, push messages and TMDB metadata
 - **Data export**: your complete history as portable JSON with TMDB and TVDB ids
 - **Admin console** with live telemetry and account management
 

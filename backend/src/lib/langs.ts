@@ -8,7 +8,7 @@
 // The frontend keeps its own copy in src/i18n/index.ts, since the two packages
 // don't share code. They have to agree: a language offered in the picker but
 // missing here would be rejected by the API.
-export const LANGS = ['en', 'fr', 'de'] as const
+export const LANGS = ['en', 'fr', 'de', 'es'] as const
 export type Lang = (typeof LANGS)[number]
 
 export const DEFAULT_LANG: Lang = 'en'
@@ -18,6 +18,7 @@ export const LANG_TO_TMDB: Record<Lang, string> = {
   en: 'en-US',
   fr: 'fr-FR',
   de: 'de-DE',
+  es: 'es-ES',
 }
 
 export const isLang = (value: string): value is Lang => (LANGS as readonly string[]).includes(value)
