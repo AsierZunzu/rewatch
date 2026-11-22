@@ -55,20 +55,33 @@ jobs:
       - run: npm ci
       - run: npm run build
 
+  # Both platforms, as published, each on a native runner like docker.yml. The
+  # per-arch runtime `npm ci` is where native modules and Prisma's engine choice
+  # can break on arm64 alone.
   docker:
-    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - platform: linux/amd64
+            runner: ubuntu-latest
+          - platform: linux/arm64
+            runner: ubuntu-24.04-arm
+    runs-on: ${{ matrix.runner }}
     steps:
+      - name: Prepare
+        env:
+          PLATFORM: ${{ matrix.platform }}
+        run: echo "PLATFORM_PAIR=${PLATFORM//\//-}" >> "$GITHUB_ENV"
+
       - uses: actions/checkout@v7
 
-      - uses: docker/setup-qemu-action@v4
       - uses: docker/setup-buildx-action@v4
 
-      # Both platforms, as published. Only the runtime `npm ci` runs under QEMU
-      # (the build stage is native), and that per-arch install is where native
-      # modules and Prisma's engine choice can break on arm64 alone.
+      # Reads the per-arch cache docker.yml writes on master.
       - uses: docker/build-push-action@v7
         with:
           context: .
-          platforms: linux/amd64,linux/arm64
+          platforms: ${{ matrix.platform }}
           push: false
-          cache-from: type=gha
+          cache-from: type=gha,scope=${{ env.PLATFORM_PAIR }}
