@@ -19,8 +19,8 @@
   "dependencies": {
     "@fastify/cookie": "^11.1.5",
     "@fastify/multipart": "^10.1.9",
-    "@fastify/rate-limit": "^11.2.2",
-    "@fastify/static": "^10.1.11",
+    "@fastify/rate-limit": "^11.3.0",
+    "@fastify/static": "^10.1.12",
     "@prisma/adapter-pg": "^7.10.1",
     "@prisma/client": "^7.10.1",
     "adm-zip": "^0.6.1",
